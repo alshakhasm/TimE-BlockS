@@ -10,6 +10,24 @@ if (!appRoot) {
   throw new Error('Missing app root container.');
 }
 
+function formatDurationLabel(minutes) {
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) {
+    return `${hours}h`;
+  }
+  return `${hours.toFixed(1)}h`;
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char] || char);
+}
+
 function getISOWeekNumber(date) {
   const workingDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const weekday = workingDate.getUTCDay() || 7;
@@ -24,7 +42,7 @@ const HOURS_VIEW_END = 23;
 const SLOTS_PER_HOUR = 2; // 30 minute slots
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const durationOptions = [30, 60, 90, 120, 150, 180];
+const durationOptions = [30, 60, 90, 120, 150, 180, 210, 240];
 
 const activities = [
   { id: 'cook', name: 'Cooking', color: 'hsl(35, 95%, 55%)', quota: 8, actual: 10 },
@@ -36,20 +54,7 @@ const activities = [
 
 const activityMap = new Map(activities.map((item) => [item.id, item]));
 
-const sampleBlocks = [
-  { id: 'b1', activityId: 'deep', day: 1, start: 8, duration: 3 },
-  { id: 'b2', activityId: 'train', day: 1, start: 8.5, duration: 1 },
-  { id: 'b3', activityId: 'cook', day: 2, start: 18, duration: 1.5 },
-  { id: 'b4', activityId: 'read', day: 3, start: 20, duration: 1.5 },
-  { id: 'b5', activityId: 'deep', day: 3, start: 9, duration: 4 },
-  { id: 'b6', activityId: 'deep', day: 4, start: 7, duration: 2.5 },
-  { id: 'b7', activityId: 'train', day: 4, start: 7.5, duration: 1 },
-  { id: 'b8', activityId: 'read', day: 4, start: 21, duration: 1 },
-  { id: 'b9', activityId: 'play', day: 5, start: 19, duration: 2 },
-  { id: 'b10', activityId: 'cook', day: 6, start: 11, duration: 2 },
-  { id: 'b11', activityId: 'play', day: 6, start: 21, duration: 1.5 },
-  { id: 'b12', activityId: 'deep', day: 0, start: 10, duration: 3 }
-];
+const sampleBlocks = [];
 
 const quotaStatus = activities.map((activity) => {
   const diff = activity.actual - activity.quota;
@@ -63,6 +68,11 @@ const quotaStatus = activities.map((activity) => {
 });
 
 const rangeFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric'
+});
+
+const boardDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric'
 });
@@ -88,6 +98,14 @@ function computeWeekContext(offset = 0) {
   };
 }
 
+function getWeekDates(context) {
+  return Array.from({ length: days.length }, (_, index) => {
+    const date = new Date(context.start);
+    date.setDate(context.start.getDate() + index);
+    return date;
+  });
+}
+
 function updateHeaderRange() {
   if (!headerRange) {
     return;
@@ -99,6 +117,7 @@ function updateHeaderRange() {
 }
 
 const hourRange = HOURS_VIEW_END - HOURS_VIEW_START;
+const TOTAL_SLOTS = hourRange * SLOTS_PER_HOUR;
 
 function formatHourLabel(hour) {
   const normalized = hour % 24;
@@ -165,7 +184,7 @@ function timeBlockMarkup(block) {
 
 const gridDaysMarkup = days
   .map((day, index) => {
-    const isWeekend = day === 'Fri' || day === 'Sat';
+    const isWeekend = day === 'Sun' || day === 'Sat';
     const blocks = sampleBlocks
       .filter((block) => block.day === index)
       .map((block) => timeBlockMarkup(block))
@@ -197,9 +216,32 @@ const paletteMarkup = activities.map((activity) => {
 const durationChipsMarkup = durationOptions
   .map((minutes, index) => `
     <button class="duration-chip ${index === 1 ? 'is-selected' : ''}" type="button" data-duration="${minutes}">
-      ${minutes}m
+      ${formatDurationLabel(minutes)}
     </button>
   `)
+  .join('');
+
+const swatchOptions = [
+  '#6366F1',
+  '#22D3EE',
+  '#10B981',
+  '#F59E0B',
+  '#F97316',
+  '#EF4444',
+  '#EC4899',
+  '#8B5CF6',
+  '#0EA5E9',
+  '#64748B'
+];
+
+const colorSwatchMarkup = swatchOptions
+  .map(
+    (hex, index) => `
+      <button class="color-swatch ${index === 0 ? 'is-selected' : ''}" type="button" data-color="${hex}" aria-label="Select color ${hex}">
+        <span style="background:${hex}"></span>
+      </button>
+    `
+  )
   .join('');
 
 const blockHistory = [...sampleBlocks].sort((a, b) => {
@@ -252,14 +294,23 @@ const sidebarMarkup = `
       <div class="sidebar__panel sidebar__panel--create is-active" data-panel="create">
         <form class="create-form" autocomplete="off">
           <div class="create-form__group">
-            <label class="create-form__label" for="task-name">Task name</label>
             <input class="create-form__input" id="task-name" name="task-name" placeholder="e.g. Writing Sprint" type="text" />
           </div>
-          <div class="create-form__group create-form__group--color">
-            <label class="create-form__label" for="task-color">Accent color</label>
-            <div class="color-picker">
-              <input class="color-picker__input" id="task-color" name="task-color" type="color" value="#4f46e5" />
-              <span class="color-picker__value" aria-live="polite">#4F46E5</span>
+          <div class="create-form__group">
+            <span class="create-form__label">Accent color</span>
+            <div class="color-swatch-grid">
+              ${colorSwatchMarkup}
+            </div>
+            <div class="create-form__info">
+              <div class="block-counter">
+                <button class="counter-button" type="button" data-step="-1" aria-label="Decrease block count">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8" /></svg>
+                </button>
+                <span id="block-count-display">Blocks: 0</span>
+                <button class="counter-button" type="button" data-step="1" aria-label="Increase block count">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v8M8 12h8" /></svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="create-form__group">
@@ -268,13 +319,8 @@ const sidebarMarkup = `
               ${durationChipsMarkup}
             </div>
           </div>
-          <div class="create-form__palette">
-            <span class="create-form__label create-form__label--caps">Templates</span>
-            <div class="create-form__palette-grid">
-              ${paletteMarkup}
-            </div>
-          </div>
-          <button class="create-form__submit" type="button">Stage block</button>
+          <button class="create-form__submit" type="button">Create block</button>
+          <div class="create-form__list" id="created-blocks" aria-live="polite"></div>
         </form>
       </div>
       <div class="sidebar__panel sidebar__panel--list" data-panel="list">
@@ -344,15 +390,74 @@ const sidebar = appRoot.querySelector('.sidebar');
 const workspace = appRoot.querySelector('.workspace');
 const sidebarPanels = Array.from(appRoot.querySelectorAll('.sidebar__panel'));
 const railButtons = Array.from(document.querySelectorAll('.rail-button'));
-const paletteButtons = Array.from(appRoot.querySelectorAll('.palette-item'));
 const viewButtons = Array.from(document.querySelectorAll('.view-toggle'));
 const gridDays = appRoot.querySelector('.grid-days');
+const dayColumns = Array.from(appRoot.querySelectorAll('.day-column'));
+const daySurfaces = Array.from(appRoot.querySelectorAll('.day-column__surface'));
+const boardDayLabels = Array.from(appRoot.querySelectorAll('.board__day-label'));
+const boardDayNames = Array.from(appRoot.querySelectorAll('.board__day-name'));
+const boardDayDates = Array.from(appRoot.querySelectorAll('.board__day-date'));
 const durationChips = Array.from(appRoot.querySelectorAll('.duration-chip'));
-const colorInput = appRoot.querySelector('.color-picker__input');
-const colorValue = appRoot.querySelector('.color-picker__value');
+const colorSwatches = Array.from(appRoot.querySelectorAll('.color-swatch'));
 const navButtons = Array.from(document.querySelectorAll('[data-direction]'));
+const nameInput = appRoot.querySelector('#task-name');
+const blockCountDisplay = appRoot.querySelector('#block-count-display');
+const createdBlocksContainer = appRoot.querySelector('#created-blocks');
+const createButton = appRoot.querySelector('.create-form__submit');
+const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button'));
+
+let selectedColor = swatchOptions[0];
+let selectedDuration = durationOptions[1] ?? durationOptions[0];
+const createdBlocks = [];
+const scheduledBlocks = [];
 
 updateHeaderRange();
+
+function renderWeekView() {
+  if (!gridDays) {
+    return;
+  }
+
+  const context = computeWeekContext(weekOffset);
+  const weekDates = getWeekDates(context);
+
+  gridDays.setAttribute('data-week-start', context.start.toISOString().split('T')[0]);
+
+  boardDayLabels.forEach((label, index) => {
+    const date = weekDates[index];
+    if (!label || !date) {
+      return;
+    }
+
+    label.setAttribute('data-date', date.toISOString());
+
+    const nameEl = boardDayNames[index];
+    if (nameEl) {
+      nameEl.textContent = days[date.getDay()];
+    }
+
+    const dateEl = boardDayDates[index];
+    if (dateEl) {
+      dateEl.textContent = String(date.getDate());
+      dateEl.setAttribute('aria-label', boardDateFormatter.format(date));
+    }
+  });
+
+  dayColumns.forEach((column, index) => {
+    const date = weekDates[index];
+    if (!column || !date) {
+      return;
+    }
+
+    column.dataset.day = days[date.getDay()];
+    column.dataset.date = date.toISOString().split('T')[0];
+
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    column.classList.toggle('day-column--weekend', Boolean(isWeekend));
+  });
+}
+
+renderWeekView();
 
 function setActiveSidebarTab(targetTab) {
   railButtons.forEach((button) => {
@@ -390,29 +495,263 @@ railButtons.forEach((button) => {
 
 setActiveSidebarTab('create');
 
-if (colorInput && colorValue) {
-  const updateColorValue = (value) => {
-    colorValue.textContent = value.toUpperCase();
-  };
-
-  updateColorValue(colorInput.value);
-  colorInput.addEventListener('input', (event) => {
-    const nextValue = event.target.value;
-    updateColorValue(nextValue);
+function setSelectedColor(color) {
+  selectedColor = color;
+  colorSwatches.forEach((swatch) => {
+    const isMatch = swatch.dataset.color === color;
+    swatch.classList.toggle('is-selected', isMatch);
   });
 }
+
+colorSwatches.forEach((swatch) => {
+  swatch.addEventListener('click', () => {
+    const color = swatch.dataset.color;
+    if (!color) return;
+    setSelectedColor(color);
+  });
+});
 
 durationChips.forEach((chip) => {
   chip.addEventListener('click', () => {
     durationChips.forEach((item) => item.classList.remove('is-selected'));
     chip.classList.add('is-selected');
+    const minutes = Number(chip.dataset.duration);
+    if (!Number.isNaN(minutes)) {
+      selectedDuration = minutes;
+    }
   });
 });
 
-paletteButtons.forEach((button) => {
+function renderCreatedBlocks() {
+  if (!blockCountDisplay || !createdBlocksContainer) {
+    return;
+  }
+  blockCountDisplay.textContent = `Blocks: ${createdBlocks.length}`;
+  if (createdBlocks.length === 0) {
+    createdBlocksContainer.innerHTML = '<p class="create-form__empty">No blocks yet.</p>';
+    return;
+  }
+
+  createdBlocksContainer.innerHTML = createdBlocks
+    .map(
+      (block) => `
+        <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}">
+          <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
+          <span class="create-form__list-name">${escapeHtml(block.name)}</span>
+        </article>
+      `
+    )
+    .join('');
+}
+
+setSelectedColor(selectedColor);
+renderCreatedBlocks();
+
+function getBlockPayloadFromElement(element) {
+  if (!element) {
+    return null;
+  }
+  const duration = Number(element.dataset.blockDuration);
+  return {
+    id: element.dataset.blockId || '',
+    name: element.dataset.blockName || 'Untitled block',
+    color: element.dataset.blockColor || selectedColor,
+    durationMinutes: Number.isFinite(duration) && duration > 0 ? duration : selectedDuration
+  };
+}
+
+function handleCreatedBlockDragStart(event) {
+  const target = event.target instanceof HTMLElement ? event.target.closest('.create-form__list-item') : null;
+  if (!target || !event.dataTransfer) {
+    return;
+  }
+  const payload = getBlockPayloadFromElement(target);
+  if (!payload) {
+    return;
+  }
+  const data = JSON.stringify(payload);
+  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.setData('application/json', data);
+  event.dataTransfer.setData('text/plain', data);
+  target.classList.add('is-dragging');
+}
+
+function handleCreatedBlockDragEnd(event) {
+  const target = event.target instanceof HTMLElement ? event.target.closest('.create-form__list-item') : null;
+  if (target) {
+    target.classList.remove('is-dragging');
+  }
+}
+
+createdBlocksContainer?.addEventListener('dragstart', handleCreatedBlockDragStart);
+createdBlocksContainer?.addEventListener('dragend', handleCreatedBlockDragEnd);
+
+function hasBlockPayload(dataTransfer) {
+  if (!dataTransfer) {
+    return false;
+  }
+  const types = Array.from(dataTransfer.types || []);
+  return types.includes('application/json') || types.includes('text/plain');
+}
+
+function parseBlockTransfer(dataTransfer) {
+  if (!dataTransfer) {
+    return null;
+  }
+  const raw = dataTransfer.getData('application/json') || dataTransfer.getData('text/plain');
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
+}
+
+function computeDropSlot(surface, clientY, durationSlots) {
+  const rect = surface.getBoundingClientRect();
+  const offsetY = clientY - rect.top;
+  const slotHeight = rect.height / (TOTAL_SLOTS + 1);
+  if (!Number.isFinite(slotHeight) || slotHeight <= 0) {
+    return 0;
+  }
+  const rawSlot = Math.floor(offsetY / slotHeight);
+  const maxStart = Math.max(0, TOTAL_SLOTS - durationSlots);
+  return Math.min(maxStart, Math.max(0, rawSlot));
+}
+
+function buildScheduledBlockElement(block) {
+  const element = document.createElement('article');
+  element.className = 'time-block time-block--scheduled';
+  element.style.setProperty('--start', String(block.startSlot));
+  element.style.setProperty('--span', String(block.durationSlots));
+  element.style.setProperty('--block-color', block.color);
+  const durationLabel = formatDurationHours(block.durationHours);
+  const startLabel = formatTimeOfDay(block.startHour);
+  const endLabel = formatTimeOfDay(block.endHour);
+  element.dataset.blockId = block.id;
+  if (typeof block.dayIndex === 'number' && block.dayIndex >= 0) {
+    element.dataset.dayIndex = String(block.dayIndex);
+  }
+  element.innerHTML = `
+    <span class="time-block__label">${escapeHtml(block.name)}</span>
+    <span class="time-block__duration">${durationLabel}</span>
+    <span class="time-block__time">${startLabel} – ${endLabel}</span>
+  `;
+  return element;
+}
+
+function handleSurfaceDragEnter(event) {
+  if (!hasBlockPayload(event.dataTransfer)) {
+    return;
+  }
+  event.preventDefault();
+  const surface = event.currentTarget;
+  surface.classList.add('is-drop-target');
+}
+
+function handleSurfaceDragOver(event) {
+  if (!hasBlockPayload(event.dataTransfer)) {
+    return;
+  }
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+function handleSurfaceDragLeave(event) {
+  const surface = event.currentTarget;
+  const related = event.relatedTarget;
+  if (!surface.contains(related)) {
+    surface.classList.remove('is-drop-target');
+  }
+}
+
+function handleSurfaceDrop(event) {
+  const surface = event.currentTarget;
+  surface.classList.remove('is-drop-target');
+  if (!hasBlockPayload(event.dataTransfer)) {
+    return;
+  }
+  event.preventDefault();
+  const payload = parseBlockTransfer(event.dataTransfer);
+  if (!payload) {
+    return;
+  }
+  const durationMinutes = Number(payload.durationMinutes);
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return;
+  }
+  const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+  const startSlot = computeDropSlot(surface, event.clientY, durationSlots);
+  const dayColumn = surface.closest('.day-column');
+  const dayIndex = dayColumn ? dayColumns.indexOf(dayColumn) : -1;
+  const scheduledBlock = {
+    id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: payload.name || 'Untitled block',
+    color: payload.color || selectedColor,
+    durationMinutes,
+    durationSlots,
+    durationHours: durationSlots / SLOTS_PER_HOUR,
+    startSlot,
+    startHour: HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR,
+    dayIndex
+  };
+  scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+  const element = buildScheduledBlockElement(scheduledBlock);
+  surface.appendChild(element);
+  scheduledBlocks.push(scheduledBlock);
+}
+
+daySurfaces.forEach((surface) => {
+  if (!surface) {
+    return;
+  }
+  surface.addEventListener('dragenter', handleSurfaceDragEnter);
+  surface.addEventListener('dragover', handleSurfaceDragOver);
+  surface.addEventListener('dragleave', handleSurfaceDragLeave);
+  surface.addEventListener('drop', handleSurfaceDrop);
+});
+
+createButton?.addEventListener('click', () => {
+  const nameValue = (nameInput?.value || '').trim();
+  const block = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: nameValue || 'Untitled block',
+    color: selectedColor,
+    duration: selectedDuration
+  };
+  createdBlocks.unshift(block);
+  renderCreatedBlocks();
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.focus();
+  }
+});
+
+counterButtons.forEach((button) => {
   button.addEventListener('click', () => {
-    paletteButtons.forEach((item) => item.classList.remove('palette-item--active'));
-    button.classList.add('palette-item--active');
+    const step = Number(button.dataset.step);
+    if (Number.isNaN(step)) {
+      return;
+    }
+
+    if (step > 0 && createdBlocks.length > 0) {
+      const blockToDuplicate = createdBlocks[0];
+      createdBlocks.unshift({
+        ...blockToDuplicate,
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      });
+      renderCreatedBlocks();
+      return;
+    }
+
+    if (step < 0 && createdBlocks.length > 0) {
+      createdBlocks.shift();
+      renderCreatedBlocks();
+    }
   });
 });
 
@@ -436,5 +775,6 @@ navButtons.forEach((button) => {
     const direction = button.dataset.direction === 'prev' ? -1 : 1;
     weekOffset += direction;
     updateHeaderRange();
+    renderWeekView();
   });
 });
