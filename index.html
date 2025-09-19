@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TimE BlockS</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-header__controls">
+        <div class="brand">
+          <span class="brand__title">TIME BLOCKS</span>
+        </div>
+        <div class="app-header__control-group">
+          <button class="nav-button" type="button" data-direction="prev" aria-label="Previous week">◀</button>
+          <div class="view-toggle-group" role="tablist" aria-label="Select calendar view">
+            <button class="view-toggle is-active" type="button" data-view="week" role="tab" aria-selected="true">Week</button>
+            <button class="view-toggle" type="button" data-view="month" role="tab" aria-selected="false">Month</button>
+          </div>
+          <button class="nav-button" type="button" data-direction="next" aria-label="Next week">▶</button>
+          <div class="app-header__range" id="header-range">Loading…</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-shell" id="app">
+      <!-- Content will be injected by app.js -->
+    </main>
+
+    <footer class="app-footer">
+      <p>Built with vanilla HTML, CSS, and JavaScript.</p>
+    </footer>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
