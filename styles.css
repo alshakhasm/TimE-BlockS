@@ -196,14 +196,14 @@ button {
 
 
 .sidebar-rail {
-  width: 56px;
+  width: 40px;
   background: linear-gradient(180deg, #1a1a1a 0%, #111 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 1.25rem 0;
-  gap: 1.1rem;
+  padding: 0.6rem 0;
+  gap: 0.6rem;
   align-self: stretch;
   height: 100%;
 }
@@ -213,8 +213,8 @@ button {
   border: none;
   background: transparent;
   color: rgba(200, 200, 210, 0.55);
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   border-radius: 0;
   display: grid;
   place-items: center;
@@ -224,8 +224,8 @@ button {
 
 
 .rail-icon {
-  width: 24px;
-  height: 24px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   stroke-width: 1.4;
   stroke-linecap: round;
@@ -269,7 +269,7 @@ button {
 
 .sidebar {
   width: 144px;
-  padding: 0.9rem 0.5rem;
+  padding: 0.9rem 0.3rem;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 0.7rem;
@@ -282,6 +282,7 @@ button {
 .sidebar__content {
   position: relative;
   overflow: hidden;
+  margin-left: -6px;
 }
 
 .sidebar__panel {
@@ -424,8 +425,8 @@ button {
 }
 
 .counter-button svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
@@ -502,9 +503,9 @@ button {
 }
 
 .duration-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
 }
 
 .duration-chip {
@@ -518,8 +519,13 @@ button {
   letter-spacing: 0.16em;
   cursor: pointer;
   transition: border-color 200ms ease, box-shadow 200ms ease;
-  min-width: 56px;
+  min-width: 48px;
   text-align: center;
+}
+
+.duration-chip--full {
+  grid-column: 1 / -1;
+  justify-self: stretch;
 }
 
 .duration-chip.is-selected {
