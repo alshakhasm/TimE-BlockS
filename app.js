@@ -667,6 +667,12 @@ const sidebarRailMarkup = `
         <path d="M12 5v14M5 12h14" />
       </svg>
     </button>
+    <button class="rail-button" type="button" data-panel="now" aria-pressed="false" title="Add Now">
+      <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 7v5l3 3" />
+        <circle cx="12" cy="12" r="8" />
+      </svg>
+    </button>
     <button class="rail-button" type="button" data-panel="list" aria-pressed="false" title="History">
       <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M6 7h12M6 12h12M6 17h12" />
@@ -714,6 +720,15 @@ const sidebarMarkup = `
           <button class="create-form__submit" type="button">Create block</button>
           <div class="create-form__list" id="created-blocks" aria-live="polite"></div>
         </form>
+      </div>
+      <div class="sidebar__panel sidebar__panel--now" data-panel="now">
+        <div class="create-form">
+          <div class="create-form__group">
+            <span class="create-form__label">Add Now</span>
+            <p class="app-footer__hint" style="margin:0;color:var(--ink-soft)">Uses current name, color, and duration.</p>
+          </div>
+          <button id="add-now-button" class="create-form__submit" type="button">Add block for Now</button>
+        </div>
       </div>
       <div class="sidebar__panel sidebar__panel--list" data-panel="list">
         <div class="block-history">
@@ -796,6 +811,7 @@ const nameInput = appRoot.querySelector('#task-name');
 const blockCountDisplay = appRoot.querySelector('#block-count-display');
 const createdBlocksContainer = appRoot.querySelector('#created-blocks');
 const createButton = appRoot.querySelector('.create-form__submit');
+const addNowButton = document.querySelector('#add-now-button');
 const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button'));
 
 // Storage control elements in the footer
@@ -1038,8 +1054,13 @@ if (Array.isArray(scheduledBlocks) && scheduledBlocks.length > 0) {
   });
   scheduledBlocks.forEach((block) => {
     const el = buildScheduledBlockElement(block);
+    // prefer anchoring by absolute date if present
+    let surface = null;
+    if (block.date) {
+      surface = daySurfaces.find((s) => s.dataset.date === block.date);
+    }
     const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
-    const surface = daySurfaces[dayIdx];
+    if (!surface && dayIdx >= 0) surface = daySurfaces[dayIdx];
     if (surface) surface.appendChild(el);
   });
   // align after adding
@@ -1295,6 +1316,7 @@ function buildScheduledBlockElement(block) {
   if (typeof block.dayIndex === 'number' && block.dayIndex >= 0) {
     element.dataset.dayIndex = String(block.dayIndex);
   }
+  if (block.date) element.dataset.date = block.date;
   element.setAttribute('draggable', 'true');
   element.addEventListener('dragstart', (ev) => {
     try {
@@ -1395,6 +1417,7 @@ function buildScheduledBlockElement(block) {
           const existing = scheduledBlocks[idx];
           existing.startSlot = startSlot;
           existing.dayIndex = dayIndex;
+          existing.date = dayColumn ? dayColumn.dataset.date : existing.date;
           existing.startHour = HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR;
           existing.durationSlots = durationSlots;
           existing.durationHours = durationSlots / SLOTS_PER_HOUR;
@@ -1407,6 +1430,7 @@ function buildScheduledBlockElement(block) {
           existingEl.dataset.startSlot = String(startSlot);
           existingEl.dataset.durationSlots = String(durationSlots);
           existingEl.dataset.dayIndex = String(dayIndex);
+          if (dayColumn) existingEl.dataset.date = dayColumn.dataset.date;
           surface.appendChild(existingEl);
         }
         alignSurfaceBlocks(surface);
@@ -1521,7 +1545,9 @@ function handleSurfaceDrop(event) {
     durationHours: durationSlots / SLOTS_PER_HOUR,
     startSlot,
     startHour: HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR,
-    dayIndex
+    dayIndex,
+    // store absolute date for anchoring across week navigation
+    date: surface.dataset.date || null
   };
   scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
   const element = buildScheduledBlockElement(scheduledBlock);
@@ -1646,6 +1672,47 @@ createButton?.addEventListener('click', () => {
     nameInput.focus();
   }
   scheduleAutoSave();
+});
+
+// Add Now: schedule a block anchored to current local date/time
+addNowButton?.addEventListener('click', () => {
+  const name = (nameInput?.value || '').trim() || 'Untitled';
+  const durationMinutes = Number(selectedDuration) || 60;
+  const color = selectedColor;
+  const now = new Date();
+  const context = computeWeekContext(weekOffset);
+  const weekDates = getWeekDates(context);
+  const todayIdx = now.getDay();
+  const dayDate = weekDates[todayIdx];
+  const dateStr = dayDate.toISOString().split('T')[0];
+  // compute startSlot within visible window, clamp to grid
+  const hourNow = now.getHours() + now.getMinutes() / 60;
+  const clampedHour = Math.min(HOURS_VIEW_END - 0.5, Math.max(HOURS_VIEW_START, hourNow));
+  const startSlot = Math.max(0, Math.round((clampedHour - HOURS_VIEW_START) * SLOTS_PER_HOUR));
+  const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+  const maxStart = Math.max(0, TOTAL_SLOTS - durationSlots);
+  const start = Math.min(maxStart, startSlot);
+  const scheduledBlock = {
+    id: `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name,
+    color,
+    durationMinutes,
+    durationSlots,
+    durationHours: durationSlots / SLOTS_PER_HOUR,
+    startSlot: start,
+    startHour: HOURS_VIEW_START + start / SLOTS_PER_HOUR,
+    dayIndex: todayIdx,
+    date: dateStr
+  };
+  scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+  scheduledBlocks.push(scheduledBlock);
+  // append to correct day surface
+  const surface = daySurfaces[todayIdx];
+  if (surface) {
+    surface.appendChild(buildScheduledBlockElement(scheduledBlock));
+    alignSurfaceBlocks(surface);
+  }
+  saveState();
 });
 
 counterButtons.forEach((button) => {
