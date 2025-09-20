@@ -321,7 +321,7 @@ button {
 .create-form__label {
   font-family: var(--font-sans);
 .report-tab { background:transparent;border:1px solid rgba(0,0,0,0.08);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px }
-.report-tab.is-active { background:var(--accent, #111);color:#fff;border-color:transparent }
+.report-tab.is-active { background:var(--accent, #111); color: #FFD54F; border-color:transparent; font-weight:700 }
 .report-bar-row { display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.04) }
 .report-bar__meta { min-width:240px }
 .report-bar__sub { color: rgba(255,255,255,0.75); font-size:13px; margin-top:6px }
