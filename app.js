@@ -602,7 +602,7 @@ const paletteMarkup = activities.map((activity) => {
 
 const durationChipsMarkup = durationOptions
   .map((minutes, index) => `
-    <button class="duration-chip ${index === 1 ? 'is-selected' : ''}" type="button" data-duration="${minutes}">
+    <button class="duration-chip ${index === 1 ? 'is-selected' : ''} ${index === 0 ? 'duration-chip--full' : ''}" type="button" data-duration="${minutes}">
       ${formatDurationLabel(minutes)}
     </button>
   `)
@@ -783,7 +783,7 @@ const sidebar = appRoot.querySelector('.sidebar');
 const workspace = appRoot.querySelector('.workspace');
 const sidebarPanels = Array.from(appRoot.querySelectorAll('.sidebar__panel'));
 const railButtons = Array.from(appRoot.querySelectorAll('.rail-button'));
-const viewButtons = Array.from(appRoot.querySelectorAll('.view-toggle'));
+const viewButtons = Array.from(document.querySelectorAll('.view-toggle'));
 const gridDays = appRoot.querySelector('.grid-days');
 const dayColumns = Array.from(appRoot.querySelectorAll('.day-column'));
 const daySurfaces = Array.from(appRoot.querySelectorAll('.day-column__surface'));
@@ -817,6 +817,16 @@ function renderWeekView() {
   if (!gridDays) {
     return;
   }
+  // clear month view artifacts if any
+  gridDays.removeAttribute('data-month-start');
+  // remove any month-cell nodes that may have been appended into surfaces
+  dayColumns.forEach((col) => {
+    const surface = col.querySelector('.day-column__surface');
+    if (surface) {
+      const monthCells = Array.from(surface.querySelectorAll('.month-cell'));
+      monthCells.forEach((c) => c.remove());
+    }
+  });
 
   const context = computeWeekContext(weekOffset);
   const weekDates = getWeekDates(context);
@@ -887,6 +897,123 @@ function renderScheduledBlocksForWeek() {
       }
     });
     daySurfaces.forEach((surface) => alignSurfaceBlocks(surface));
+  }
+}
+
+// Compute the start date for a month view according to rules:
+// - Month grid should start on the first Sunday of the month
+// - Exception: if the month starts on Monday, show the previous Sunday (start from day -1)
+function computeMonthStartDate(year, month) {
+  // month is 0-indexed (0 = January)
+  const firstOfMonth = new Date(year, month, 1);
+  const day = firstOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ...
+  // if month starts on Sunday, start there; if starts on Monday, start on previous Sunday
+  if (day === 0) return new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 1);
+  if (day === 1) {
+    // previous Sunday
+    const prev = new Date(firstOfMonth);
+    prev.setDate(0); // last day of previous month
+    // compute previous Sunday's date: go back to the last Sunday before firstOfMonth
+    // simpler: set date to firstOfMonth.getDate() - 1 (which is 0) already handled, but ensure weekday 0
+    // We'll compute by subtracting 1 day
+    const start = new Date(firstOfMonth);
+    start.setDate(firstOfMonth.getDate() - 1);
+    return new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  }
+  // otherwise find the first Sunday after or on the first
+  const delta = (7 - day) % 7; // days to add to get to next Sunday
+  const start = new Date(firstOfMonth);
+  start.setDate(firstOfMonth.getDate() + delta);
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate());
+}
+
+function renderMonthView() {
+  // Render month view as a separate page (hide main workspace + summary)
+  const plannerEl = document.querySelector('.planner');
+  const summaryEl = document.querySelector('.summary');
+  // hide only the planner area so the sidebar remains visible
+  if (plannerEl) plannerEl.style.display = 'none';
+  if (summaryEl) summaryEl.style.display = 'none';
+
+  // remove any existing month-page first
+  let monthPage = document.querySelector('.month-page');
+  if (monthPage) monthPage.remove();
+
+  monthPage = document.createElement('div');
+  monthPage.className = 'month-page';
+
+  const now = new Date();
+  const viewMonthDate = new Date(now.getFullYear(), now.getMonth() + weekOffset, 1);
+  const year = viewMonthDate.getFullYear();
+  const month = viewMonthDate.getMonth();
+  const startDate = computeMonthStartDate(year, month);
+
+  const header = document.createElement('div');
+  header.className = 'month-page__header';
+  const title = document.createElement('h2');
+  title.textContent = `${viewMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+  header.appendChild(title);
+  monthPage.appendChild(header);
+
+  const monthGrid = document.createElement('div');
+  monthGrid.className = 'month-grid';
+
+  // Build 4 week cards (2x2). Each card represents a contiguous week starting at startDate + 7*i
+  for (let w = 0; w < 4; w += 1) {
+    const weekStart = new Date(startDate);
+    weekStart.setDate(startDate.getDate() + w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const card = document.createElement('section');
+    card.className = 'week-card';
+    const hdr = document.createElement('header');
+    hdr.className = 'week-card__header';
+    hdr.textContent = `${rangeFormatter.format(weekStart)} — ${rangeFormatter.format(weekEnd)}`;
+    card.appendChild(hdr);
+
+    const weekRow = document.createElement('div');
+    weekRow.className = 'week-card__days';
+
+    for (let d = 0; d < 7; d += 1) {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + d);
+      const iso = date.toISOString().split('T')[0];
+
+      const col = document.createElement('div');
+      col.className = 'mini-day';
+      col.dataset.date = iso;
+      col.innerHTML = `<div class="mini-day__label">${days[date.getDay()]}<span class="mini-day__num"> ${date.getDate()}</span></div><div class="mini-day__content"></div>`;
+
+      // append scheduled blocks that match the date
+      const content = col.querySelector('.mini-day__content');
+      scheduledBlocks.forEach((block) => {
+        if (block.date === iso) {
+          const el = buildScheduledBlockElement(block);
+          el.classList.add('time-block--month');
+          content.appendChild(el);
+        }
+      });
+
+      weekRow.appendChild(col);
+    }
+
+    card.appendChild(weekRow);
+    monthGrid.appendChild(card);
+  }
+
+  monthPage.appendChild(monthGrid);
+  // place the month page inside the workspace so it aligns with the sidebar
+  const workspaceEl = document.querySelector('.workspace');
+  if (workspaceEl) {
+    const summaryEl = workspaceEl.querySelector('.summary');
+    if (summaryEl && summaryEl.parentElement === workspaceEl) {
+      workspaceEl.insertBefore(monthPage, summaryEl);
+    } else {
+      workspaceEl.appendChild(monthPage);
+    }
+  } else {
+    appRoot.appendChild(monthPage);
   }
 }
 
@@ -1119,11 +1246,17 @@ loadButton?.addEventListener('click', () => {
   });
   scheduledBlocks.forEach((block) => {
     const el = buildScheduledBlockElement(block);
+    // prefer anchoring by absolute date if present
+    let surface = null;
+    if (block.date) {
+      surface = daySurfaces.find((s) => s.dataset.date === block.date);
+    }
     const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
-    const surface = daySurfaces[dayIdx];
+    if (!surface && dayIdx >= 0) surface = daySurfaces[dayIdx];
     if (surface) surface.appendChild(el);
   });
-  alignSurfaceBlocks();
+  // align each surface after re-adding elements
+  daySurfaces.forEach((surface) => alignSurfaceBlocks(surface));
   if (storageStatus) storageStatus.textContent = 'Loaded';
 });
 
@@ -1563,6 +1696,8 @@ function handleSurfaceDrop(event) {
     }
   }
   alignSurfaceBlocks(surface);
+  // persist newly created scheduled block
+  saveState();
 }
 
 function alignSurfaceBlocks(surface) {
@@ -1757,6 +1892,34 @@ viewButtons.forEach((button) => {
 
     const view = button.dataset.view || 'week';
     gridDays?.setAttribute('data-view', view);
+    console.debug('view toggle clicked', view);
+    if (view === 'month') {
+      try {
+        renderMonthView();
+        // update header range to show month label
+        const now = new Date();
+        const viewMonthDate = new Date(now.getFullYear(), now.getMonth() + weekOffset, 1);
+        headerRange.textContent = viewMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+      } catch (err) {
+        console.error('renderMonthView failed', err);
+      }
+    } else {
+      // restore week rendering
+      try {
+        // remove month page if present
+  const monthPage = document.querySelector('.month-page');
+  if (monthPage) monthPage.remove();
+  const plannerEl = document.querySelector('.planner');
+  const summaryEl = document.querySelector('.summary');
+  if (plannerEl) plannerEl.style.display = '';
+  if (summaryEl) summaryEl.style.display = '';
+        renderWeekView();
+        renderScheduledBlocksForWeek();
+        updateHeaderRange();
+      } catch (err) {
+        console.error('renderWeekView failed', err);
+      }
+    }
   });
 });
 
@@ -1766,5 +1929,8 @@ navButtons.forEach((button) => {
     weekOffset += direction;
     updateHeaderRange();
     renderWeekView();
+    // after changing the week view, re-render scheduled blocks so date-anchored
+    // items are placed into the newly computed day surfaces
+    renderScheduledBlocksForWeek();
   });
 });
