@@ -1605,15 +1605,18 @@ function buildScheduledBlockElement(block) {
     element.classList.remove('is-dragging');
     try { window.__timeblock_payload = null; } catch (err) {}
   });
+  const startLabel = typeof block.startHour === 'number' ? formatTimeOfDay(block.startHour) : '';
   element.innerHTML = `
     <div class="time-block__content">
       <span class="time-block__label">${escapeHtml(block.name)}</span>
       <span class="time-block__duration">${durationLabel}</span>
+      <span class="time-block__start">${startLabel}</span>
     </div>
   `;
 
   // Pointer-drag fallback (for browsers with flaky HTML5 DnD)
   let pointerState = null;
+  const DRAG_THRESHOLD = 8; // pixels
   element.addEventListener('pointerdown', (evt) => {
     try {
       if (evt.button !== 0) return; // only left button
@@ -1622,16 +1625,25 @@ function buildScheduledBlockElement(block) {
       // disable native HTML5 DnD while using pointer fallback to avoid duplicate drop handling
       element.draggable = false;
       element.__usingPointerDrag = true;
-      pointerState = { id: evt.pointerId, startX: evt.clientX, startY: evt.clientY };
+      pointerState = { id: evt.pointerId, startX: evt.clientX, startY: evt.clientY, dragging: false };
+      // show ghost but don't treat tiny clicks as drags until movement threshold is exceeded
       dragGhost.show(block.name || 'Block', evt.clientX + 12, evt.clientY + 12);
-  dbg('pointerdown', { id: block.id, x: evt.clientX, y: evt.clientY });
+      dbg('pointerdown', { id: block.id, x: evt.clientX, y: evt.clientY });
     } catch (e) {}
   });
 
   element.addEventListener('pointermove', (evt) => {
     try {
       if (!pointerState || pointerState.id !== evt.pointerId) return;
-      dragGhost.move(evt.clientX + 12, evt.clientY + 12);
+      const dx = Math.abs(evt.clientX - pointerState.startX);
+      const dy = Math.abs(evt.clientY - pointerState.startY);
+      if (!pointerState.dragging && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) {
+        // mark as actual drag only after threshold
+        pointerState.dragging = true;
+      }
+      if (pointerState.dragging) {
+        dragGhost.move(evt.clientX + 12, evt.clientY + 12);
+      }
     } catch (e) {}
 
   });
@@ -1639,7 +1651,17 @@ function buildScheduledBlockElement(block) {
   element.addEventListener('pointerup', (evt) => {
     try {
       if (!pointerState || pointerState.id !== evt.pointerId) return;
-  dragGhost.hide();
+      // if not a real drag (small movement), treat as a click — restore state and do nothing
+      if (!pointerState.dragging) {
+        dragGhost.hide();
+        element.releasePointerCapture(evt.pointerId);
+        pointerState = null;
+        element.draggable = true;
+        element.__usingPointerDrag = false;
+        return;
+      }
+      // real drag: perform drop logic
+      dragGhost.hide();
       element.releasePointerCapture(evt.pointerId);
       pointerState = null;
       // restore native draggable behavior
@@ -1662,7 +1684,7 @@ function buildScheduledBlockElement(block) {
         return;
       }
       if (surface) {
-  // compute drop slot and move
+        // compute drop slot and move
         const slotHeight = surface.getBoundingClientRect().height / (TOTAL_SLOTS + 1);
         const rect = surface.getBoundingClientRect();
         const offsetY = evt.clientY - rect.top;

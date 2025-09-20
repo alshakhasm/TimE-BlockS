@@ -1055,6 +1055,14 @@ button {
   white-space: nowrap;
 }
 
+.time-block__start {
+  font-size: 0.7rem;
+  color: rgba(249,250,255,0.65);
+  font-weight: 300;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
 .time-block--align-start {
   justify-content: flex-start;
 }
