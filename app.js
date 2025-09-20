@@ -1717,11 +1717,17 @@ function buildScheduledBlockElement(block) {
           existingEl.dataset.dayIndex = String(dayIndex);
           if (dayColumn) existingEl.dataset.date = dayColumn.dataset.date;
           // update visible start time label
-          const startEl = existingEl.querySelector && existingEl.querySelector('.time-block__start');
-          if (startEl) {
-            startEl.textContent = formatTimeOfDay(existing.startHour);
-            try { console.debug('move-pointer.dom', { id: block.id, domStartText: startEl.textContent }); } catch (e) {}
+          let startEl = existingEl.querySelector && existingEl.querySelector('.time-block__start');
+          if (!startEl) {
+            // create the start label if an older DOM element lacks it
+            startEl = document.createElement('span');
+            startEl.className = 'time-block__start';
+            const durEl = existingEl.querySelector && existingEl.querySelector('.time-block__duration');
+            if (durEl && durEl.parentNode) durEl.parentNode.insertBefore(startEl, durEl.nextSibling);
+            else existingEl.appendChild(startEl);
           }
+          startEl.textContent = formatTimeOfDay(existing.startHour || HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR);
+          try { console.debug('move-pointer.dom', { id: block.id, domStartText: startEl.textContent }); } catch (e) {}
           surface.appendChild(existingEl);
         }
         alignSurfaceBlocks(surface);
@@ -1824,11 +1830,16 @@ function handleSurfaceDrop(event) {
         existingEl.dataset.dayIndex = String(existing.dayIndex);
         if (dayColumn && dayColumn.dataset.date) existingEl.dataset.date = dayColumn.dataset.date;
         // update visible start time label after drop
-        const startEl2 = existingEl.querySelector && existingEl.querySelector('.time-block__start');
-        if (startEl2) {
-          startEl2.textContent = formatTimeOfDay(existing.startHour);
-          try { console.debug('drop-scheduled.dom', { id: payload.id, domStartText: startEl2.textContent }); } catch (e) {}
+        let startEl2 = existingEl.querySelector && existingEl.querySelector('.time-block__start');
+        if (!startEl2) {
+          startEl2 = document.createElement('span');
+          startEl2.className = 'time-block__start';
+          const durEl2 = existingEl.querySelector && existingEl.querySelector('.time-block__duration');
+          if (durEl2 && durEl2.parentNode) durEl2.parentNode.insertBefore(startEl2, durEl2.nextSibling);
+          else existingEl.appendChild(startEl2);
         }
+        startEl2.textContent = formatTimeOfDay(existing.startHour);
+        try { console.debug('drop-scheduled.dom', { id: payload.id, domStartText: startEl2.textContent }); } catch (e) {}
         surface.appendChild(existingEl);
       }
       alignSurfaceBlocks(surface);
