@@ -500,7 +500,7 @@ function updateHeaderRange() {
   const context = computeWeekContext(weekOffset);
   const startLabel = rangeFormatter.format(context.start);
   const endLabel = rangeFormatter.format(context.end);
-  headerRange.textContent = `Week ${context.weekNumber}, ${context.year} ${startLabel} – ${endLabel}`;
+  headerRange.textContent = `${context.year} ${startLabel} – ${endLabel}`;
 }
 
 const hourRange = HOURS_VIEW_END - HOURS_VIEW_START;
@@ -663,8 +663,12 @@ const blockHistoryMarkup = blockHistory
 const sidebarRailMarkup = `
   <nav class="sidebar-rail" aria-label="Sidebar">
     <button class="rail-button is-active" type="button" data-panel="create" aria-pressed="true" title="Create">
-      <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 5v14M5 12h14" />
+      <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true" role="img">
+        <!-- Document outline with folded corner -->
+        <path d="M4 3h9l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <path d="M13 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <!-- Plus icon -->
+        <path d="M12 11v6M9 14h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
       </svg>
     </button>
     <button class="rail-button" type="button" data-panel="list" aria-pressed="false" title="History">
@@ -753,29 +757,6 @@ appRoot.innerHTML = `
         </div>
       </section>
     </section>
-  </section>
-  <section class="summary">
-    <header class="summary__header">
-      <h2 class="summary__title">Time Budget Ledger</h2>
-      <p class="summary__hint">Watch the bars — they glow when you lean in, flash when you overdo it.</p>
-    </header>
-    <div class="summary__content">
-      ${quotaStatus
-        .map(
-          (activity) => `
-            <div class="summary-item ${activity.over ? 'summary-item--over' : ''}">
-              <div class="summary-item__label">
-                <span class="summary-item__name">${activity.name}</span>
-                <span class="summary-item__qty">${activity.actual}/${activity.quota} hrs ${activity.over ? '❌' : ''}</span>
-              </div>
-              <div class="summary-item__bar" style="--bar-color:${activity.color};">
-                <span class="summary-item__progress" style="--progress:${activity.percentage}"></span>
-              </div>
-            </div>
-          `
-        )
-        .join('')}
-    </div>
   </section>
 `;
 
@@ -928,12 +909,9 @@ function computeMonthStartDate(year, month) {
 }
 
 function renderMonthView() {
-  // Render month view as a separate page (hide main workspace + summary)
+  // Render month view as a separate page (hide main workspace planner)
   const plannerEl = document.querySelector('.planner');
-  const summaryEl = document.querySelector('.summary');
-  // hide only the planner area so the sidebar remains visible
   if (plannerEl) plannerEl.style.display = 'none';
-  if (summaryEl) summaryEl.style.display = 'none';
 
   // remove any existing month-page first
   let monthPage = document.querySelector('.month-page');
@@ -948,12 +926,7 @@ function renderMonthView() {
   const month = viewMonthDate.getMonth();
   const startDate = computeMonthStartDate(year, month);
 
-  const header = document.createElement('div');
-  header.className = 'month-page__header';
-  const title = document.createElement('h2');
-  title.textContent = `${viewMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`;
-  header.appendChild(title);
-  monthPage.appendChild(header);
+  // month page relies on the main header control bar for the month label
 
   const monthGrid = document.createElement('div');
   monthGrid.className = 'month-grid';
@@ -1006,12 +979,7 @@ function renderMonthView() {
   // place the month page inside the workspace so it aligns with the sidebar
   const workspaceEl = document.querySelector('.workspace');
   if (workspaceEl) {
-    const summaryEl = workspaceEl.querySelector('.summary');
-    if (summaryEl && summaryEl.parentElement === workspaceEl) {
-      workspaceEl.insertBefore(monthPage, summaryEl);
-    } else {
-      workspaceEl.appendChild(monthPage);
-    }
+    workspaceEl.appendChild(monthPage);
   } else {
     appRoot.appendChild(monthPage);
   }
@@ -1910,9 +1878,7 @@ viewButtons.forEach((button) => {
   const monthPage = document.querySelector('.month-page');
   if (monthPage) monthPage.remove();
   const plannerEl = document.querySelector('.planner');
-  const summaryEl = document.querySelector('.summary');
   if (plannerEl) plannerEl.style.display = '';
-  if (summaryEl) summaryEl.style.display = '';
         renderWeekView();
         renderScheduledBlocksForWeek();
         updateHeaderRange();
