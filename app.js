@@ -5,6 +5,7 @@
 
 const appRoot = document.querySelector('#app');
 const headerRange = document.querySelector('#header-range');
+const STORAGE_KEY = 'timeBlocksState';
 
 if (!appRoot) {
   throw new Error('Missing app root container.');
@@ -77,7 +78,385 @@ const boardDateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric'
 });
 
+// Minimal report overlay: created on demand
+function buildReportOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'report-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3000;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px;';
+  // enforce dark theme inline to avoid stylesheet caching or specificity issues
+  overlay.style.background = '#111827';
+  overlay.style.color = '#ffffff';
+  overlay.style.fontFamily = 'var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto)';
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:12px;justify-content:space-between;';
+  const left = document.createElement('div');
+  left.style.cssText = 'display:flex;align-items:center;gap:12px;';
+  const back = document.createElement('button');
+  back.textContent = '← Back';
+  back.type = 'button';
+  back.addEventListener('click', () => overlay.remove());
+  const title = document.createElement('h2');
+  title.textContent = 'Time Blocks Report';
+  left.appendChild(back);
+  left.appendChild(title);
+  header.appendChild(left);
+  // tabs
+  const tabs = document.createElement('div');
+  tabs.style.cssText = 'display:flex;gap:8px;align-items:center';
+  const weekTab = document.createElement('button');
+  weekTab.type = 'button';
+  weekTab.textContent = 'Week';
+  weekTab.dataset.view = 'week';
+  weekTab.className = 'report-tab is-active';
+  const monthTab = document.createElement('button');
+  monthTab.type = 'button';
+  monthTab.textContent = 'Month';
+  monthTab.dataset.view = 'month';
+  monthTab.className = 'report-tab';
+  tabs.appendChild(weekTab);
+  tabs.appendChild(monthTab);
+  header.appendChild(tabs);
+  overlay.appendChild(header);
+  const content = document.createElement('div');
+  content.id = 'report-overlay-content';
+  content.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+  overlay.appendChild(content);
+  // tab behavior
+  weekTab.addEventListener('click', () => {
+    weekTab.classList.add('is-active');
+    monthTab.classList.remove('is-active');
+    overlay.dataset.reportView = 'week';
+    renderReportOverlay();
+  });
+  monthTab.addEventListener('click', () => {
+    monthTab.classList.add('is-active');
+    weekTab.classList.remove('is-active');
+    overlay.dataset.reportView = 'month';
+    renderReportOverlay();
+  });
+  return overlay;
+}
+
+function renderReportOverlay() {
+  const content = document.getElementById('report-overlay-content');
+  if (!content) return;
+  const view = (document.getElementById('report-overlay') || {}).dataset?.reportView || 'week';
+  const scheduled = Array.isArray(scheduledBlocks) ? scheduledBlocks : [];
+  const created = Array.isArray(createdBlocks) ? createdBlocks : [];
+  // Prepare aggregated stats from scheduled and created/template blocks
+  const aggregates = {};
+  scheduled.forEach((b) => {
+    const name = b.name || 'Untitled';
+    const hours = typeof b.durationHours === 'number' ? b.durationHours : (b.durationMinutes ? b.durationMinutes / 60 : 0);
+    aggregates[name] = (aggregates[name] || 0) + Number(hours || 0);
+  });
+  created.forEach((c) => {
+    const name = c.name || 'Untitled';
+    const hours = Number.isFinite(Number(c.duration)) ? Number(c.duration) / 60 : 0;
+    aggregates[name] = (aggregates[name] || 0) + Number(hours || 0);
+  });
+
+  // find max for bar scaling
+  const maxHours = Object.values(aggregates).reduce((m, v) => Math.max(m, Number(v || 0)), 0) || 1;
+
+  if (view === 'week') {
+    // week view: show aggregated totals first, then prefer scheduled blocks; if none, show created/template blocks
+    // build aggregate rows (totals) so both week and month show totals
+    const aggRowsForWeek = Object.keys(aggregates).sort((a,b) => aggregates[b] - aggregates[a]).map((name) => {
+      const hours = Number(aggregates[name] || 0);
+  const pct = Math.max(4, Math.round((hours / maxHours) * 100 * 0.3));
+      const colorSource = scheduled.find((s) => s.name === name) || created.find((c) => c.name === name) || {};
+      const color = colorSource.color || 'var(--accent,#6366F1)';
+      return `
+        <div class="report-bar-row" style="display:flex;align-items:center;gap:12px;padding:8px 0">
+          <div class="report-block" style="background:${color};color:#fff;padding:8px 14px;border-radius:8px;min-width:96px;text-align:center;font-weight:700">${escapeHtml(name)}</div>
+          <div style="flex:1;display:flex;align-items:center;gap:12px">
+            <div class="report-agg-bar" style="flex:1;background:rgba(255,255,255,0.06);height:36px;border-radius:8px;position:relative;overflow:hidden">
+              <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:${color};display:flex;align-items:center;justify-content:center;color: #fff;font-weight:700">${hours.toFixed(2)}h</div>
+            </div>
+            <div style="width:52px;text-align:right;font-weight:700">${hours.toFixed(2)}h</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (scheduled.length > 0) {
+      const rows = scheduled.slice().sort((a,b) => (a.dayIndex - b.dayIndex) || (a.startSlot - b.startSlot)).map((b) => {
+        const hours = typeof b.durationHours === 'number' ? Number(b.durationHours) : (b.durationMinutes ? b.durationMinutes / 60 : 0);
+        const pct = Math.round((hours / maxHours) * 100);
+        const colorSource = b || created.find((c) => c.name === b.name) || {};
+        const color = colorSource.color || 'var(--accent,#6366F1)';
+        return `
+          <div class="report-bar-row">
+            <div style="display:flex;align-items:center;gap:12px;width:100%">
+              <div class="report-block" style="background:${color};color:#fff;padding:6px 10px;border-radius:6px;min-width:96px;text-align:center;font-weight:600">${escapeHtml(b.name)}</div>
+              <div style="flex:1">
+                <div class="report-bar__meta"><strong>${escapeHtml(b.name)}</strong><div class="report-bar__sub">${typeof b.dayIndex === 'number' ? days[b.dayIndex] : '-'} • ${typeof b.startHour === 'number' ? formatTimeOfDay(b.startHour) : '-'} • ${hours.toFixed(2)}h</div></div>
+                <div class="report-bar"><div class="report-bar__fill" style="width:${pct}%">${hours.toFixed(2)}h</div></div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      // For now, only show aggregates to avoid duplicate-looking rows
+      content.innerHTML = `<div class="report-aggregates">${aggRowsForWeek}</div>`;
+      return;
+    }
+    if (created.length > 0) {
+  const rows = created.map((c) => {
+        const hours = Number.isFinite(Number(c.duration)) ? Number(c.duration) / 60 : 0;
+        const pct = Math.round((hours / maxHours) * 100);
+        const color = c.color || 'var(--accent,#6366F1)';
+        return `
+          <div class="report-bar-row">
+            <div style="display:flex;align-items:center;gap:12px;width:100%">
+              <div class="report-block" style="background:${color};color:#fff;padding:6px 10px;border-radius:6px;min-width:96px;text-align:center;font-weight:600">${escapeHtml(c.name)}</div>
+              <div style="flex:1">
+                <div class="report-bar__meta"><strong>${escapeHtml(c.name)}</strong><div class="report-bar__sub">Template • ${hours.toFixed(2)}h</div></div>
+                <div class="report-bar"><div class="report-bar__fill" style="width:${pct}%">${hours.toFixed(2)}h</div></div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      // For now, only show aggregates to avoid duplicate-looking rows
+      content.innerHTML = `<div class="report-aggregates">${aggRowsForWeek}</div>`;
+      return;
+    }
+    // helpful CTA when no data exists
+    content.innerHTML = `
+      <div style="padding:16px;color:var(--ink-muted)">
+        <p>No scheduled or template blocks found for this week.</p>
+        <p>You can create some sample blocks to preview the report.</p>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button id="create-sample-data" type="button">Create sample data</button>
+        </div>
+      </div>
+    `;
+    const sampleBtn = document.getElementById('create-sample-data');
+    if (sampleBtn) {
+      sampleBtn.addEventListener('click', () => {
+        createSampleData();
+        renderCreatedBlocks();
+        renderScheduledBlocksForWeek();
+        renderReportOverlay();
+      });
+    }
+    return;
+  }
+
+  // month view: aggregate by block name (sum hours) and render horizontal bars
+  const aggRows = Object.keys(aggregates).sort((a,b) => aggregates[b] - aggregates[a]).map((name) => {
+    const hours = Number(aggregates[name] || 0);
+  const pct = Math.max(4, Math.round((hours / maxHours) * 100 * 0.3));
+    const colorSource = scheduled.find((s) => s.name === name) || created.find((c) => c.name === name) || {};
+    const color = colorSource.color || 'var(--accent,#6366F1)';
+    return `
+      <div class="report-bar-row" style="display:flex;align-items:center;gap:12px;padding:8px 0">
+        <div class="report-block" style="background:${color};color:#fff;padding:8px 14px;border-radius:8px;min-width:96px;text-align:center;font-weight:700">${escapeHtml(name)}</div>
+        <div style="flex:1;display:flex;align-items:center;gap:12px">
+          <div class="report-agg-bar" style="flex:1;background:rgba(255,255,255,0.06);height:36px;border-radius:8px;position:relative;overflow:hidden">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:${color};display:flex;align-items:center;justify-content:center;color: #fff;font-weight:700">${hours.toFixed(2)}h</div>
+          </div>
+          <div style="width:52px;text-align:right;font-weight:700">${hours.toFixed(2)}h</div>
+        </div>
+      </div>
+    `;
+  });
+  content.innerHTML = `<div class="report-stats">${aggRows.join('')}</div>`;
+}
+
+const reportBtn = document.getElementById('open-report');
+if (reportBtn) {
+  reportBtn.addEventListener('click', () => {
+    let ov = document.getElementById('report-overlay');
+    if (!ov) {
+      ov = buildReportOverlay();
+      document.body.appendChild(ov);
+    }
+    renderReportOverlay();
+  });
+}
+
 let weekOffset = 0;
+
+// Debugging switch: set to `true` to enable on-screen debug logs
+const DEBUG = false;
+
+// Debug panel (on-screen) to help trace drag/drop during development (only when DEBUG=true)
+const debugPanel = (() => {
+  if (!DEBUG) return { log: () => {} };
+  try {
+    const panel = document.createElement('div');
+    panel.id = 'debug-panel';
+    panel.style.cssText = 'position:fixed;right:12px;top:12px;z-index:9999;min-width:220px;background:rgba(0,0,0,0.6);color:#fff;padding:8px;border-radius:8px;font-family:monospace;font-size:12px;pointer-events:none;opacity:0.9';
+    panel.innerHTML = '<strong>Debug</strong><div id="debug-content" style="margin-top:6px;max-height:220px;overflow:auto;white-space:pre-wrap"></div>';
+    document.body.appendChild(panel);
+    const content = panel.querySelector('#debug-content');
+    return {
+      log: (label, data) => {
+        try {
+          const time = new Date().toLocaleTimeString();
+          const entry = document.createElement('div');
+          entry.textContent = `${time} — ${label}: ${typeof data === 'string' ? data : JSON.stringify(data)}`;
+          content.prepend(entry);
+          // keep a few lines
+          while (content.children.length > 8) content.removeChild(content.lastChild);
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  } catch (e) {
+    return { log: () => {} };
+  }
+})();
+
+// Drag ghost element to visually represent dragging item
+const dragGhost = (() => {
+  try {
+    const el = document.createElement('div');
+    el.id = 'drag-ghost';
+    el.style.display = 'none';
+    el.innerHTML = '<div class="ghost-inner"></div>';
+    document.body.appendChild(el);
+    const inner = el.querySelector('.ghost-inner');
+    return {
+      show: (text, x, y) => {
+        inner.textContent = text || '';
+        el.style.display = 'block';
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+      },
+      move: (x, y) => {
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+      },
+      hide: () => {
+        el.style.display = 'none';
+      }
+    };
+  } catch (e) {
+    return { show: () => {}, move: () => {}, hide: () => {} };
+  }
+})();
+
+// Simple debug helper: only logs when DEBUG is true
+function dbg(label, data) {
+  if (!DEBUG) return;
+  try {
+    console.debug(label, data);
+  } catch (e) {}
+  try {
+    debugPanel.log(label, data);
+  } catch (e) {}
+}
+
+// update ghost position during dragover
+document.addEventListener('dragover', (e) => {
+  try {
+    if (!e) return;
+    dragGhost.move(e.clientX + 12, e.clientY + 12);
+  } catch (err) {}
+});
+
+// Global listeners to help debug drag/drop reachability and dataTransfer types
+try {
+  document.addEventListener('dragenter', (e) => {
+    try {
+      const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+      dbg('doc-dragenter', { types });
+    } catch (err) {}
+  });
+  document.addEventListener('dragover', (e) => {
+    try {
+      const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+      dbg('doc-dragover', { types });
+    } catch (err) {}
+  });
+  document.addEventListener('drop', (e) => {
+    try {
+      const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+      dbg('doc-drop', { types });
+    } catch (err) {}
+  });
+} catch (e) {
+  // ignore if document is not ready
+}
+
+// Fallback routing: some browsers don't deliver drop events to deep targets.
+// Forward drops to calendar surfaces or trash based on pointer location.
+try {
+  document.addEventListener('dragover', (e) => {
+    try {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el) return;
+      const surface = el.closest && el.closest('.day-column__surface');
+      const trash = el.closest && el.closest('#trash-button');
+      if (surface || trash) {
+        e.preventDefault();
+      }
+    } catch (err) {}
+  }, true);
+
+  document.addEventListener('drop', (e) => {
+    try {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el) return;
+      const surface = el.closest && el.closest('.day-column__surface');
+      const trash = el.closest && el.closest('#trash-button');
+
+      if (surface) {
+        // craft a minimal event object for the handler
+        const fakeEvent = {
+          currentTarget: surface,
+          dataTransfer: e.dataTransfer,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          preventDefault: () => e.preventDefault()
+        };
+        handleSurfaceDrop(fakeEvent);
+        // choose a color from any matching scheduled/created block, fallback to accent
+        const colorSource = (scheduled.find((s) => s.name === name) || created.find((c) => c.name === name) || {});
+        const color = escapeHtml(colorSource.color || 'var(--accent,#6366F1)');
+        return `
+          <div class="report-bar-row">
+            <div class="report-bar__meta"><strong>${escapeHtml(name)}</strong><div class="report-bar__sub">Total</div></div>
+            <div class="report-bar"><div class="report-bar__fill" style="width:${pct}%;background:${color}" aria-hidden="true"></div><div class="report-bar__label">${hours.toFixed(2)}h</div></div>
+          </div>
+        `;
+        let id = raw;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.scheduledId) id = parsed.scheduledId;
+          if (parsed && parsed.origin === 'template' && parsed.id) {
+            const idxTpl = createdBlocks.findIndex((b) => b.id === parsed.id);
+            if (idxTpl !== -1) {
+              createdBlocks.splice(idxTpl, 1);
+              renderCreatedBlocks();
+              saveState();
+            }
+            return;
+          }
+        } catch (err) {
+          // ignore
+        }
+        if (!id) return;
+        const elToRemove = appRoot.querySelector(`[data-block-id="${id}"]`);
+        if (elToRemove) elToRemove.remove();
+        const idx = scheduledBlocks.findIndex((b) => b.id === id);
+        if (idx !== -1) {
+          scheduledBlocks.splice(idx, 1);
+          saveState();
+        }
+      }
+    } catch (err) {
+      // swallow
+    }
+  }, true);
+} catch (err) {
+  // ignore
+}
 
 function computeWeekContext(offset = 0) {
   const today = new Date();
@@ -285,6 +664,11 @@ const sidebarRailMarkup = `
         <path d="M6 7h12M6 12h12M6 17h12" />
       </svg>
     </button>
+    <button class="rail-button" type="button" data-action="trash" aria-pressed="false" title="Delete block" id="trash-button">
+      <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6M10 6V4h4v2" />
+      </svg>
+    </button>
   </nav>
 `;
 
@@ -389,8 +773,8 @@ appRoot.innerHTML = `
 const sidebar = appRoot.querySelector('.sidebar');
 const workspace = appRoot.querySelector('.workspace');
 const sidebarPanels = Array.from(appRoot.querySelectorAll('.sidebar__panel'));
-const railButtons = Array.from(document.querySelectorAll('.rail-button'));
-const viewButtons = Array.from(document.querySelectorAll('.view-toggle'));
+const railButtons = Array.from(appRoot.querySelectorAll('.rail-button'));
+const viewButtons = Array.from(appRoot.querySelectorAll('.view-toggle'));
 const gridDays = appRoot.querySelector('.grid-days');
 const dayColumns = Array.from(appRoot.querySelectorAll('.day-column'));
 const daySurfaces = Array.from(appRoot.querySelectorAll('.day-column__surface'));
@@ -399,17 +783,23 @@ const boardDayNames = Array.from(appRoot.querySelectorAll('.board__day-name'));
 const boardDayDates = Array.from(appRoot.querySelectorAll('.board__day-date'));
 const durationChips = Array.from(appRoot.querySelectorAll('.duration-chip'));
 const colorSwatches = Array.from(appRoot.querySelectorAll('.color-swatch'));
-const navButtons = Array.from(document.querySelectorAll('[data-direction]'));
+const navButtons = Array.from(appRoot.querySelectorAll('[data-direction]'));
 const nameInput = appRoot.querySelector('#task-name');
 const blockCountDisplay = appRoot.querySelector('#block-count-display');
 const createdBlocksContainer = appRoot.querySelector('#created-blocks');
 const createButton = appRoot.querySelector('.create-form__submit');
 const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button'));
 
+// Storage control elements in the footer
+const saveButton = document.querySelector('#save-local');
+const loadButton = document.querySelector('#load-local');
+const clearButton = document.querySelector('#clear-local');
+const storageStatus = document.querySelector('#storage-status');
+
 let selectedColor = swatchOptions[0];
 let selectedDuration = durationOptions[1] ?? durationOptions[0];
-const createdBlocks = [];
-const scheduledBlocks = [];
+let createdBlocks = [];
+let scheduledBlocks = [];
 
 updateHeaderRange();
 
@@ -457,7 +847,27 @@ function renderWeekView() {
   });
 }
 
+function renderScheduledBlocksForWeek() {
+  if (!daySurfaces) return;
+  // clear existing scheduled elements
+  daySurfaces.forEach((surface) => {
+    const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+    scheduled.forEach((el) => el.remove());
+  });
+  // render from scheduledBlocks array
+  if (Array.isArray(scheduledBlocks) && scheduledBlocks.length > 0) {
+    scheduledBlocks.forEach((block) => {
+      const el = buildScheduledBlockElement(block);
+      const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
+      const surface = daySurfaces[dayIdx];
+      if (surface) surface.appendChild(el);
+    });
+    daySurfaces.forEach((surface) => alignSurfaceBlocks(surface));
+  }
+}
+
 renderWeekView();
+renderScheduledBlocksForWeek();
 
 function setActiveSidebarTab(targetTab) {
   railButtons.forEach((button) => {
@@ -535,17 +945,239 @@ function renderCreatedBlocks() {
   createdBlocksContainer.innerHTML = createdBlocks
     .map(
       (block) => `
-        <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}">
+        <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}" data-block-origin="template">
           <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
           <span class="create-form__list-name">${escapeHtml(block.name)}</span>
         </article>
       `
     )
     .join('');
+
+  // attach drag handlers to created/template items so they can be deleted via trash
+  const items = Array.from(createdBlocksContainer.querySelectorAll('.create-form__list-item'));
+  items.forEach((item) => {
+    item.setAttribute('draggable', 'true');
+    item.addEventListener('dragstart', (ev) => {
+      const payload = getBlockPayloadFromElement(item);
+      if (!payload) return;
+      try {
+        if (ev.dataTransfer) {
+          ev.dataTransfer.setData('application/json', JSON.stringify(payload));
+          ev.dataTransfer.setData('text/plain', payload.id || payload.name || '');
+          ev.dataTransfer.effectAllowed = 'copy';
+        }
+        item.classList.add('is-dragging');
+      } catch (e) {
+        // ignore
+      }
+    });
+    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+  });
 }
 
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (typeof parsed.weekOffset === 'number') {
+        weekOffset = parsed.weekOffset;
+      }
+      if (Array.isArray(parsed.createdBlocks)) {
+        createdBlocks = parsed.createdBlocks;
+      }
+      if (Array.isArray(parsed.scheduledBlocks)) {
+        scheduledBlocks = parsed.scheduledBlocks;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load saved planner state', error);
+  }
+}
+
+function saveState() {
+  const snapshot = {
+    weekOffset,
+    createdBlocks,
+    scheduledBlocks
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    if (storageStatus) storageStatus.textContent = 'Saved ✓';
+  } catch (error) {
+    console.error('Failed to persist planner state', error);
+    if (storageStatus) storageStatus.textContent = 'Save failed';
+  }
+}
+
+loadState();
+
+// Apply loaded week offset to the UI and render
+updateHeaderRange();
+renderWeekView();
 setSelectedColor(selectedColor);
 renderCreatedBlocks();
+
+// After initial load, render any scheduled blocks into the surfaces
+if (Array.isArray(scheduledBlocks) && scheduledBlocks.length > 0) {
+  // remove any existing scheduled elements (from templates)
+  daySurfaces.forEach((surface) => {
+    const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+    scheduled.forEach((el) => el.remove());
+  });
+  scheduledBlocks.forEach((block) => {
+    const el = buildScheduledBlockElement(block);
+    const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
+    const surface = daySurfaces[dayIdx];
+    if (surface) surface.appendChild(el);
+  });
+  // align after adding
+  daySurfaces.forEach((surface) => alignSurfaceBlocks(surface));
+}
+
+function clearState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    weekOffset = 0;
+    createdBlocks = [];
+    scheduledBlocks = [];
+    renderCreatedBlocks();
+    daySurfaces.forEach((surface) => {
+      const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+      scheduled.forEach((el) => el.remove());
+    });
+    updateHeaderRange();
+    renderWeekView();
+    if (storageStatus) storageStatus.textContent = 'Cleared';
+  } catch (error) {
+    console.error('Failed to clear stored state', error);
+    if (storageStatus) storageStatus.textContent = 'Clear failed';
+  }
+}
+
+// Helper: populate some sample blocks (for debugging/report preview)
+function createSampleData() {
+  createdBlocks = [
+    { id: `tpl-1`, name: 'Running', color: '#10B981', duration: 60 },
+    { id: `tpl-2`, name: 'Reading', color: '#6366F1', duration: 90 },
+    { id: `tpl-3`, name: 'Coding', color: '#F97316', duration: 120 }
+  ];
+  const baseDay = 1; // Monday index
+  scheduledBlocks = [
+    { id: 's1', name: 'Running', color: '#10B981', durationMinutes: 60, durationSlots: 2, durationHours: 1, startSlot: 6, startHour: 8, dayIndex: baseDay },
+    { id: 's2', name: 'Reading', color: '#6366F1', durationMinutes: 90, durationSlots: 3, durationHours: 1.5, startSlot: 10, startHour: 10, dayIndex: baseDay + 1 },
+    { id: 's3', name: 'Coding', color: '#F97316', durationMinutes: 120, durationSlots: 4, durationHours: 2, startSlot: 14, startHour: 12, dayIndex: baseDay + 2 }
+  ];
+  scheduleAutoSave();
+}
+
+// Wire storage buttons
+saveButton?.addEventListener('click', () => {
+  saveState();
+});
+
+loadButton?.addEventListener('click', () => {
+  loadState();
+  renderCreatedBlocks();
+  // Re-render scheduled blocks from loaded data
+  daySurfaces.forEach((surface) => {
+    // remove existing
+    const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+    scheduled.forEach((el) => el.remove());
+  });
+  scheduledBlocks.forEach((block) => {
+    const el = buildScheduledBlockElement(block);
+    const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
+    const surface = daySurfaces[dayIdx];
+    if (surface) surface.appendChild(el);
+  });
+  alignSurfaceBlocks();
+  if (storageStatus) storageStatus.textContent = 'Loaded';
+});
+
+clearButton?.addEventListener('click', () => {
+  clearState();
+});
+
+// Trash drop zone for deleting scheduled blocks
+const trashButton = document.querySelector('#trash-button');
+if (trashButton) {
+  trashButton.addEventListener('dragenter', (e) => {
+    if (hasBlockPayload(e.dataTransfer)) {
+      e.preventDefault();
+      trashButton.classList.add('is-drop-target');
+    }
+  });
+  trashButton.addEventListener('dragover', (e) => {
+    if (hasBlockPayload(e.dataTransfer)) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  trashButton.addEventListener('dragleave', () => {
+    trashButton.classList.remove('is-drop-target');
+  });
+  trashButton.addEventListener('drop', (e) => {
+    trashButton.classList.remove('is-drop-target');
+    if (!hasBlockPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+    let id = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.scheduledId) id = parsed.scheduledId;
+      // handle template payloads
+      if (parsed && parsed.origin === 'template' && parsed.id) {
+        // remove from createdBlocks
+        const idxTpl = createdBlocks.findIndex((b) => b.id === parsed.id);
+        if (idxTpl !== -1) {
+          createdBlocks.splice(idxTpl, 1);
+          renderCreatedBlocks();
+          saveState();
+        }
+        trashButton.classList.remove('is-drop-target');
+        return;
+      }
+    } catch (err) {
+      // raw text id
+    }
+    if (!id) return;
+    // remove from DOM
+    const el = document.querySelector(`[data-block-id="${id}"]`);
+    if (el) el.remove();
+    // remove from scheduledBlocks array
+    const idx = scheduledBlocks.findIndex((b) => b.id === id);
+    if (idx !== -1) {
+      scheduledBlocks.splice(idx, 1);
+      saveState();
+    }
+  });
+}
+
+// Auto-save on important changes
+const AUTO_SAVE_DEBOUNCE = 0; // 0 = immediate save
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+  if (AUTO_SAVE_DEBOUNCE <= 0) {
+    saveState();
+    return;
+  }
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    saveState();
+  }, AUTO_SAVE_DEBOUNCE);
+}
+
+// Hook into mutations that change createdBlocks or scheduledBlocks
+const createdBlocksObserver = new MutationObserver(() => scheduleAutoSave());
+if (createdBlocksContainer) {
+  createdBlocksObserver.observe(createdBlocksContainer, { childList: true, subtree: false });
+}
+
+// Drop saves: schedule auto-save on drop (handled inside the drop handler)
 
 function getBlockPayloadFromElement(element) {
   if (!element) {
@@ -556,6 +1188,7 @@ function getBlockPayloadFromElement(element) {
     id: element.dataset.blockId || '',
     name: element.dataset.blockName || 'Untitled block',
     color: element.dataset.blockColor || selectedColor,
+    origin: element.dataset.blockOrigin || 'template',
     durationMinutes: Number.isFinite(duration) && duration > 0 ? duration : selectedDuration
   };
 }
@@ -587,24 +1220,43 @@ createdBlocksContainer?.addEventListener('dragstart', handleCreatedBlockDragStar
 createdBlocksContainer?.addEventListener('dragend', handleCreatedBlockDragEnd);
 
 function hasBlockPayload(dataTransfer) {
+  // Some browsers clear dataTransfer.types during dragover/drop; use global fallback if present
   if (!dataTransfer) {
-    return false;
+    return typeof window !== 'undefined' && Boolean(window.__timeblock_payload);
   }
   const types = Array.from(dataTransfer.types || []);
-  return types.includes('application/json') || types.includes('text/plain');
+  const has = types.includes('application/json') || types.includes('text/plain');
+  if (has) return true;
+  if (typeof window !== 'undefined' && window.__timeblock_payload) return true;
+  return false;
 }
 
 function parseBlockTransfer(dataTransfer) {
   if (!dataTransfer) {
+    // fallback to global payload if available (robustness for some browsers)
+    if (typeof window !== 'undefined' && window.__timeblock_payload) {
+      return window.__timeblock_payload;
+    }
     return null;
   }
   const raw = dataTransfer.getData('application/json') || dataTransfer.getData('text/plain');
   if (!raw) {
+    if (typeof window !== 'undefined' && window.__timeblock_payload) {
+      return window.__timeblock_payload;
+    }
     return null;
   }
   try {
-    return JSON.parse(raw);
+    const payload = JSON.parse(raw);
+    if (payload && typeof payload === 'object' && !payload.origin) {
+      payload.origin = 'template';
+    }
+    return payload;
   } catch (error) {
+    // if parsing fails, attempt to use global fallback payload
+    if (typeof window !== 'undefined' && window.__timeblock_payload) {
+      return window.__timeblock_payload;
+    }
     return null;
   }
 }
@@ -628,17 +1280,147 @@ function buildScheduledBlockElement(block) {
   element.style.setProperty('--span', String(block.durationSlots));
   element.style.setProperty('--block-color', block.color);
   const durationLabel = formatDurationHours(block.durationHours);
-  const startLabel = formatTimeOfDay(block.startHour);
-  const endLabel = formatTimeOfDay(block.endHour);
   element.dataset.blockId = block.id;
+  element.dataset.blockOrigin = 'scheduled';
+  element.dataset.startSlot = String(block.startSlot);
+  element.dataset.durationSlots = String(block.durationSlots);
   if (typeof block.dayIndex === 'number' && block.dayIndex >= 0) {
     element.dataset.dayIndex = String(block.dayIndex);
   }
+  element.setAttribute('draggable', 'true');
+  element.addEventListener('dragstart', (ev) => {
+    try {
+      if (ev.dataTransfer) {
+        const payload = {
+          id: block.id,
+          origin: 'scheduled',
+          name: block.name,
+          color: block.color,
+          durationMinutes: block.durationMinutes,
+          durationSlots: block.durationSlots
+        };
+        ev.dataTransfer.setData('application/json', JSON.stringify(payload));
+        ev.dataTransfer.setData('text/plain', block.id);
+        try { window.__timeblock_payload = payload; } catch (err) {}
+        ev.dataTransfer.effectAllowed = 'move';
+      }
+  dbg('dragstart (scheduled)', { id: block.id, origin: 'scheduled', startSlot: block.startSlot });
+      element.classList.add('is-dragging');
+    } catch (e) {
+      // ignore
+    }
+  });
+  element.addEventListener('dragend', () => {
+    element.classList.remove('is-dragging');
+    try { window.__timeblock_payload = null; } catch (err) {}
+  });
   element.innerHTML = `
-    <span class="time-block__label">${escapeHtml(block.name)}</span>
-    <span class="time-block__duration">${durationLabel}</span>
-    <span class="time-block__time">${startLabel} – ${endLabel}</span>
+    <div class="time-block__content">
+      <span class="time-block__label">${escapeHtml(block.name)}</span>
+      <span class="time-block__duration">${durationLabel}</span>
+    </div>
   `;
+
+  // Pointer-drag fallback (for browsers with flaky HTML5 DnD)
+  let pointerState = null;
+  element.addEventListener('pointerdown', (evt) => {
+    try {
+      if (evt.button !== 0) return; // only left button
+      evt.preventDefault();
+      element.setPointerCapture(evt.pointerId);
+      // disable native HTML5 DnD while using pointer fallback to avoid duplicate drop handling
+      element.draggable = false;
+      element.__usingPointerDrag = true;
+      pointerState = { id: evt.pointerId, startX: evt.clientX, startY: evt.clientY };
+      dragGhost.show(block.name || 'Block', evt.clientX + 12, evt.clientY + 12);
+  dbg('pointerdown', { id: block.id, x: evt.clientX, y: evt.clientY });
+    } catch (e) {}
+  });
+
+  element.addEventListener('pointermove', (evt) => {
+    try {
+      if (!pointerState || pointerState.id !== evt.pointerId) return;
+      dragGhost.move(evt.clientX + 12, evt.clientY + 12);
+    } catch (e) {}
+
+  });
+
+  element.addEventListener('pointerup', (evt) => {
+    try {
+      if (!pointerState || pointerState.id !== evt.pointerId) return;
+  dragGhost.hide();
+      element.releasePointerCapture(evt.pointerId);
+      pointerState = null;
+      // restore native draggable behavior
+      element.draggable = true;
+      element.__usingPointerDrag = false;
+      // compute element under pointer
+      const target = document.elementFromPoint(evt.clientX, evt.clientY);
+      if (!target) return;
+      const surface = target.closest && target.closest('.day-column__surface');
+      const trash = target.closest && target.closest('#trash-button');
+      if (trash) {
+        // delete scheduled
+        const idx = scheduledBlocks.findIndex((b) => b.id === block.id);
+        if (idx !== -1) {
+          scheduledBlocks.splice(idx, 1);
+          const el = appRoot.querySelector(`[data-block-id="${block.id}"]`);
+          if (el) el.remove();
+          saveState();
+        }
+        return;
+      }
+      if (surface) {
+  // compute drop slot and move
+        const slotHeight = surface.getBoundingClientRect().height / (TOTAL_SLOTS + 1);
+        const rect = surface.getBoundingClientRect();
+        const offsetY = evt.clientY - rect.top;
+        const rawSlot = Math.floor(offsetY / slotHeight);
+        const durationSlots = block.durationSlots || Math.max(1, Math.round((block.durationMinutes / 60) * SLOTS_PER_HOUR));
+        const maxStart = Math.max(0, TOTAL_SLOTS - durationSlots);
+        const startSlot = Math.min(maxStart, Math.max(0, rawSlot));
+        const dayColumn = surface.closest('.day-column');
+        const dayIndex = dayColumn ? dayColumns.indexOf(dayColumn) : -1;
+        // update block data
+        const idx = scheduledBlocks.findIndex((b) => b.id === block.id);
+        if (idx !== -1) {
+          const existing = scheduledBlocks[idx];
+          existing.startSlot = startSlot;
+          existing.dayIndex = dayIndex;
+          existing.startHour = HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR;
+          existing.durationSlots = durationSlots;
+          existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+        }
+        // move DOM element
+        const existingEl = appRoot.querySelector(`[data-block-id="${block.id}"]`);
+        if (existingEl) {
+          existingEl.style.setProperty('--start', String(startSlot));
+          existingEl.style.setProperty('--span', String(durationSlots));
+          existingEl.dataset.startSlot = String(startSlot);
+          existingEl.dataset.durationSlots = String(durationSlots);
+          existingEl.dataset.dayIndex = String(dayIndex);
+          surface.appendChild(existingEl);
+        }
+        alignSurfaceBlocks(surface);
+        saveState();
+        // mark recent move to avoid duplicate native drop handling
+        try {
+          window.__timeblock_recentMove = { id: block.id, ts: Date.now() };
+        } catch (err) {}
+      }
+    } catch (e) {}
+  });
+  element.addEventListener('pointercancel', (evt) => {
+    try {
+      if (pointerState && pointerState.id === evt.pointerId) {
+        pointerState = null;
+        dragGhost.hide();
+        element.releasePointerCapture(evt.pointerId);
+        element.draggable = true;
+        element.__usingPointerDrag = false;
+      }
+    } catch (e) {}
+  });
   return element;
 }
 
@@ -680,14 +1462,48 @@ function handleSurfaceDrop(event) {
   if (!payload) {
     return;
   }
+  // ignore drops that duplicate a recent pointer-based move
+  try {
+    if (payload && payload.origin === 'scheduled' && window.__timeblock_recentMove && window.__timeblock_recentMove.id === payload.id && Date.now() - window.__timeblock_recentMove.ts < 700) {
+      return;
+    }
+  } catch (err) {}
+  dbg('handleSurfaceDrop payload', { payload, x: event.clientX, y: event.clientY });
   const durationMinutes = Number(payload.durationMinutes);
   if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     return;
   }
+  // If payload references an existing scheduled block (move), update its record instead of creating new
   const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
   const startSlot = computeDropSlot(surface, event.clientY, durationSlots);
   const dayColumn = surface.closest('.day-column');
   const dayIndex = dayColumn ? dayColumns.indexOf(dayColumn) : -1;
+  if (payload && payload.id) {
+    const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
+    if (idx !== -1) {
+      const existing = scheduledBlocks[idx];
+      existing.startSlot = startSlot;
+      existing.startHour = HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR;
+      existing.dayIndex = dayIndex;
+      existing.durationSlots = durationSlots;
+      existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+      // move DOM element if present
+      const existingEl = appRoot.querySelector(`[data-block-id="${payload.id}"]`);
+      dbg('dropping scheduled block', { id: payload.id, startSlot, dayIndex });
+      if (existingEl) {
+        existingEl.style.setProperty('--start', String(existing.startSlot));
+        existingEl.style.setProperty('--span', String(existing.durationSlots));
+        existingEl.dataset.startSlot = String(existing.startSlot);
+        existingEl.dataset.durationSlots = String(existing.durationSlots);
+        existingEl.dataset.dayIndex = String(existing.dayIndex);
+        surface.appendChild(existingEl);
+      }
+      alignSurfaceBlocks(surface);
+      saveState();
+      return;
+    }
+  }
+  // continuing for template-origin or new blocks
   const scheduledBlock = {
     id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: payload.name || 'Untitled block',
@@ -703,6 +1519,98 @@ function handleSurfaceDrop(event) {
   const element = buildScheduledBlockElement(scheduledBlock);
   surface.appendChild(element);
   scheduledBlocks.push(scheduledBlock);
+  if (payload.origin === 'template' && payload.id) {
+    const index = createdBlocks.findIndex((item) => item.id === payload.id);
+    if (index !== -1) {
+      createdBlocks.splice(index, 1);
+      renderCreatedBlocks();
+    }
+  }
+  alignSurfaceBlocks(surface);
+}
+
+function alignSurfaceBlocks(surface) {
+  if (!surface) {
+    return;
+  }
+  const blocks = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+  blocks.forEach((block) => {
+    block.classList.remove('time-block--align-start', 'time-block--align-end');
+    // clear previous overlap markers
+    block.classList.remove('time-block--overlap');
+    block.style.removeProperty('--overlap-top');
+    block.style.removeProperty('--overlap-height');
+    // clear previous stacking order
+    block.style.removeProperty('z-index');
+    // clear solid/translucent markers
+    block.classList.remove('time-block--solid');
+    block.classList.remove('time-block--translucent');
+  });
+
+  const entries = blocks
+    .map((block) => {
+      const start = Number(block.dataset.startSlot);
+      const span = Number(block.dataset.durationSlots);
+      return {
+        element: block,
+        start: Number.isFinite(start) ? start : 0,
+        end: Number.isFinite(span) ? start + span : start + 1
+      };
+    })
+    .sort((a, b) => a.start - b.start);
+
+  // Ensure DOM stacking: set z-index based on start slot and append in ascending order so later-start blocks are on top
+  try {
+    entries.forEach((entry) => {
+      if (entry && entry.element && entry.element.parentElement === surface) {
+        // higher start -> higher z-index to ensure later blocks appear above earlier overlays
+        const z = 1000 + (Number.isFinite(entry.start) ? entry.start : 0);
+        entry.element.style.zIndex = String(z);
+        surface.appendChild(entry.element);
+      }
+    });
+  } catch (err) {
+    // ignore DOM reorder failures
+  }
+
+  for (let i = 0; i < entries.length; i += 1) {
+    for (let j = i + 1; j < entries.length; j += 1) {
+      const first = entries[i];
+      const second = entries[j];
+      const overlap = first.end > second.start && second.end > first.start;
+      if (!overlap) {
+        continue;
+      }
+      first.element.classList.add('time-block--align-start');
+      second.element.classList.add('time-block--align-end');
+    }
+  }
+
+  // Calculate overlap pixel positions and set visual overlay vars per overlapping pair
+  if (entries.length > 1) {
+    const surfaceRect = surface.getBoundingClientRect();
+    const slotHeight = surfaceRect.height / (TOTAL_SLOTS + 1);
+    for (let a = 0; a < entries.length; a += 1) {
+      for (let b = a + 1; b < entries.length; b += 1) {
+        const A = entries[a];
+        const B = entries[b];
+        const overlapSlots = Math.min(A.end, B.end) - Math.max(A.start, B.start);
+        if (overlapSlots > 0) {
+          const overlapStartSlot = Math.max(A.start, B.start);
+          const overlapHeightPx = Math.round(overlapSlots * slotHeight);
+          // Apply overlay only to the earlier-start block (A) so the top block remains fully visible
+          const overlapTopForA = Math.round((overlapStartSlot - A.start) * slotHeight);
+          A.element.classList.add('time-block--overlap');
+          A.element.style.setProperty('--overlap-top', `${overlapTopForA}px`);
+          A.element.style.setProperty('--overlap-height', `${overlapHeightPx}px`);
+          // Mark the later-start block (B) as translucent so both blocks remain readable
+          B.element.classList.add('time-block--translucent');
+          // ensure top block is visually above overlays
+          B.element.style.zIndex = String(1200 + (Number.isFinite(B.start) ? B.start : 0));
+        }
+      }
+    }
+  }
 }
 
 daySurfaces.forEach((surface) => {
@@ -729,6 +1637,7 @@ createButton?.addEventListener('click', () => {
     nameInput.value = '';
     nameInput.focus();
   }
+  scheduleAutoSave();
 });
 
 counterButtons.forEach((button) => {
@@ -745,14 +1654,21 @@ counterButtons.forEach((button) => {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`
       });
       renderCreatedBlocks();
+      scheduleAutoSave();
       return;
     }
 
     if (step < 0 && createdBlocks.length > 0) {
       createdBlocks.shift();
       renderCreatedBlocks();
+      scheduleAutoSave();
     }
   });
+});
+
+nameInput?.addEventListener('input', () => {
+  // small convenience: schedule auto-save as user types name
+  scheduleAutoSave();
 });
 
 viewButtons.forEach((button) => {

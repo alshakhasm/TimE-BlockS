@@ -238,6 +238,35 @@ button {
   color: rgba(245, 245, 240, 0.85);
 }
 
+/* Trash highlight when dragging */
+#trash-button.is-drop-target {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ff6b6b;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.18);
+}
+
+/* Drag ghost shown while dragging items (visible clone) */
+#drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: transform 40ms linear;
+  will-change: transform;
+  opacity: 0.95;
+}
+#drag-ghost .ghost-inner {
+  background: rgba(10, 12, 18, 0.92);
+  color: #fff;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.6rem;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.4);
+}
+
 .sidebar {
   width: 210px;
   padding: 1.5rem 0.75rem;
@@ -291,6 +320,19 @@ button {
 
 .create-form__label {
   font-family: var(--font-sans);
+.report-tab { background:transparent;border:1px solid rgba(0,0,0,0.08);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px }
+.report-tab.is-active { background:var(--accent, #111);color:#fff;border-color:transparent }
+.report-bar-row { display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.04) }
+.report-bar__meta { min-width:240px }
+.report-bar__sub { color: rgba(255,255,255,0.75); font-size:13px; margin-top:6px }
+.report-bar { flex:1;height:34px;border-radius:6px;overflow:hidden;display:block;position:relative;background:transparent }
+.report-bar__fill { position:absolute; left:0; top:0; bottom:0; height:34px; border-radius:6px 0 0 6px; box-shadow: inset 0 -6px 18px rgba(0,0,0,0.06); opacity:1 }
+.report-bar__label { position:absolute; right:8px; top:50%; transform:translateY(-50%); background: rgba(0,0,0,0.55); color:#fff; padding:6px 10px; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.6); font-weight:700; font-size:13px }
+
+/* Report overlay base contrast: dark theme */
+#report-overlay { color:#fff; background:#111827 !important; padding:24px; z-index:9999 }
+#report-overlay h2 { color:#fff; font-weight:700 }
+#report-overlay button { color:inherit }
   font-size: 0.75rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -647,9 +689,11 @@ button {
 .time-label {
   font-size: 0.68rem;
   color: var(--ink-soft);
-  opacity: calc(0.65 + (var(--label-index) % 2) * 0.12);
+  opacity: 0.65;
   transform: translateY(-50%);
 }
+
+.time-label:nth-child(even) { opacity: 0.77; }
 
 .grid-days {
   display: grid;
@@ -747,30 +791,45 @@ button {
   position: absolute;
   inset-inline: 0.3rem;
   border-radius: 1rem;
-  padding: 0.7rem 1rem;
+  padding: 0.6rem 0.9rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: stretch;
-  gap: 0.45rem;
+  gap: 0.3rem;
   font-family: var(--font-sans);
-  font-size: 0.78rem;
-  line-height: 1.2;
-  color: rgba(244, 246, 255, 0.96);
-  background: color-mix(in srgb, var(--block-color) 38%, rgba(10, 12, 20, 0.68));
-  border: 1px solid color-mix(in srgb, var(--block-color) 52%, rgba(244, 246, 255, 0.25));
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+  font-size: 0.82rem;
+  line-height: 1.1;
+  color: rgba(249, 250, 255, 0.95);
+  /* Percentage mix between block color and dark surface; controlled via CSS vars */
+  --block-fill: 50%; /* percent of block color in background (default 50% translucent) */
+  --block-border: 48%; /* percent of block color in border */
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--block-color) var(--block-border), rgba(249, 250, 255, 0.25));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
   top: calc(var(--slot-height) * var(--start));
   height: calc(var(--slot-height) * var(--span));
-  backdrop-filter: blur(8px) saturate(160%);
+  backdrop-filter: blur(7px) saturate(150%);
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
+/* base colored background (under content) */
+.time-block::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--block-color) var(--block-fill), rgba(8, 10, 18, 0.7));
+  z-index: 0;
+  pointer-events: none;
+}
+
 .time-block__content {
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 0.55rem;
+  position: relative;
+  z-index: 2;
 }
 
 .time-block--scheduled {
@@ -784,15 +843,21 @@ button {
   pointer-events: none;
 }
 
-.time-block::after {
+
+/* overlap overlay sits above base background but under content */
+.time-block--overlap::after {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(255, 255, 255, 0.05);
-  opacity: 0;
-  transition: opacity 180ms ease;
+  /* inset a bit more so overlay doesn't hit rounded corners */
+  left: 0.6rem;
+  right: 0.6rem;
+  top: var(--overlap-top, 0px);
+  height: var(--overlap-height, 0px);
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 0.7rem;
   pointer-events: none;
+  z-index: 1;
+  opacity: 1;
 }
 
 .time-block:hover {
@@ -800,22 +865,19 @@ button {
   box-shadow: 0 18px 38px rgba(12, 16, 28, 0.45);
 }
 
-.time-block:hover::after {
-  opacity: 1;
-}
 
 .time-block__label {
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.78rem;
-  color: rgba(249, 250, 255, 0.94);
+  letter-spacing: 0.16em;
+  font-size: 0.76rem;
+  color: inherit;
   white-space: nowrap;
 }
 
 .time-block__duration {
   font-size: 0.74rem;
-  color: rgba(240, 244, 255, 0.85);
+  color: rgba(249, 250, 255, 0.75);
   white-space: nowrap;
 }
 
@@ -836,6 +898,32 @@ button {
   background: color-mix(in srgb, var(--block-color) 30%, rgba(255, 95, 109, 0.9) 70%);
   border-color: rgba(255, 95, 109, 0.55);
   box-shadow: 0 0 28px rgba(255, 95, 109, 0.38);
+}
+
+/* Visual overlay for overlapping area: a semi-opaque band */
+
+
+/* Ensure block content sits above the overlay so text remains readable */
+.time-block__content {
+  position: relative;
+  z-index: 2;
+}
+
+/* When a block is the top item in an overlap, make its background fully opaque
+   so underlying overlays do not show through. */
+.time-block--solid {
+  /* Increase block color mix so it appears more solid when overlapping */
+  --block-fill: 90%;
+  --block-border: 95%;
+  color: var(--ink);
+  backdrop-filter: none !important;
+}
+
+/* Make the top overlapping block more translucent so both blocks are readable */
+.time-block--translucent {
+  --block-fill: 40%;
+  --block-border: 45%;
+  z-index: 1100;
 }
 
 .summary {

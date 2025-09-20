@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TimE BlockS</title>
     <link rel="stylesheet" href="styles.css" />
+    <!-- Inline SVG favicon to prevent /favicon.ico 404s -->
+    <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23101220"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="%23f5f5f0">TB</text></svg>' />
   </head>
   <body>
     <header class="app-header">
@@ -20,6 +22,7 @@
           </div>
           <button class="nav-button" type="button" data-direction="next" aria-label="Next week">▶</button>
           <div class="app-header__range" id="header-range">Loading…</div>
+          <button id="open-report" class="app-header__report" type="button" title="Open report" aria-label="Open report">📊</button>
         </div>
       </div>
     </header>
@@ -30,6 +33,12 @@
 
     <footer class="app-footer">
       <p>Built with vanilla HTML, CSS, and JavaScript.</p>
+      <div class="storage-controls">
+        <button id="save-local" type="button">Save Locally</button>
+        <button id="load-local" type="button">Load Local</button>
+        <button id="clear-local" type="button">Clear Local</button>
+        <span id="storage-status" aria-live="polite"></span>
+      </div>
     </footer>
 
     <script src="app.js" type="module"></script>
