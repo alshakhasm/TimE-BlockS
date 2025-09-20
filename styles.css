@@ -394,8 +394,8 @@ button {
   align-items: center;
   margin-top: 0.55rem;
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.18em;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -533,15 +533,16 @@ button {
   color: var(--ink);
   font-family: var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  padding: 0.5rem 0.6rem;
+  letter-spacing: 0.12em;
+  padding: 0.45rem 0.55rem;
   border-radius: 0.75rem;
   cursor: pointer;
   transition: transform 200ms ease, box-shadow 200ms ease;
   width: 100%;
-  white-space: nowrap;
-  font-size: 0.74rem;
+  font-size: 0.70rem;
   text-align: center;
+  box-sizing: border-box;
+  line-height: 1.15;
 }
 
 .create-form__submit:hover {
