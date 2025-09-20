@@ -706,7 +706,7 @@ const sidebarMarkup = `
             </div>
           </div>
           <div class="create-form__group">
-            <span class="create-form__label">Time allowance</span>
+            <span class="create-form__label">Duration</span>
             <div class="duration-chips">
               ${durationChipsMarkup}
             </div>
