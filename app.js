@@ -99,58 +99,127 @@ function buildReportOverlay() {
   title.textContent = 'Time Blocks Report';
   left.appendChild(back);
   left.appendChild(title);
+  // date navigator (prev / range / next)
+  const nav = document.createElement('div');
+  nav.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:8px;';
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'nav-button';
+  prevBtn.textContent = '◀';
+  const rangeLabel = document.createElement('div');
+  rangeLabel.id = 'report-range';
+  rangeLabel.style.cssText = 'min-width:160px;text-align:center;font-weight:700;color:var(--ink);';
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'nav-button';
+  nextBtn.textContent = '▶';
+  nav.appendChild(prevBtn);
+  nav.appendChild(rangeLabel);
+  nav.appendChild(nextBtn);
+  // week selector (Week 1..4) — appears to the right of the month navigator
+  const weekSelector = document.createElement('div');
+  weekSelector.style.cssText = 'display:flex;gap:6px;align-items:center;margin-left:12px';
+  weekSelector.id = 'report-week-selector';
+  for (let i = 0; i < 4; i += 1) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'report-week-btn';
+    b.dataset.weekIndex = String(i);
+    b.textContent = `W${i + 1}`;
+    b.style.cssText = 'padding:6px 8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--ink-muted);cursor:pointer';
+    weekSelector.appendChild(b);
+  }
+  // allow deselecting by clicking the active button again
+  nav.appendChild(weekSelector);
+  // attach navigator into left area so it's near title
+  left.appendChild(nav);
   header.appendChild(left);
-  // tabs
-  const tabs = document.createElement('div');
-  tabs.style.cssText = 'display:flex;gap:8px;align-items:center';
-  const weekTab = document.createElement('button');
-  weekTab.type = 'button';
-  weekTab.textContent = 'Week';
-  weekTab.dataset.view = 'week';
-  weekTab.className = 'report-tab is-active';
-  // ensure initial active color is visible even if stylesheet is overridden
-  weekTab.style.color = '#FFD54F';
-  const monthTab = document.createElement('button');
-  monthTab.type = 'button';
-  monthTab.textContent = 'Month';
-  monthTab.dataset.view = 'month';
-  monthTab.className = 'report-tab';
-  tabs.appendChild(weekTab);
-  tabs.appendChild(monthTab);
-  header.appendChild(tabs);
+  // header assembled; navigator and week-selector already appended above
   overlay.appendChild(header);
   const content = document.createElement('div');
   content.id = 'report-overlay-content';
   content.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
   overlay.appendChild(content);
-  // tab behavior
-  weekTab.addEventListener('click', () => {
-    weekTab.classList.add('is-active');
-    monthTab.classList.remove('is-active');
-    overlay.dataset.reportView = 'week';
-    renderReportOverlay();
-    // inline color change to ensure visibility
-    weekTab.style.color = '#FFD54F';
-    monthTab.style.color = 'inherit';
-  });
-  monthTab.addEventListener('click', () => {
-    monthTab.classList.add('is-active');
-    weekTab.classList.remove('is-active');
-    overlay.dataset.reportView = 'month';
-    renderReportOverlay();
-    // inline color change to ensure visibility
-    monthTab.style.color = '#FFD54F';
-    weekTab.style.color = 'inherit';
-  });
+  // no Week/Month tabs — overlay operates in month mode by default
+  overlay.dataset.reportView = 'month';
   return overlay;
 }
+
+// after overlay is added to DOM, wire its nav buttons (use capture by event delegation)
+document.addEventListener('click', (e) => {
+  const overlay = document.getElementById('report-overlay');
+  if (!overlay) return;
+  const prev = overlay.querySelector('.nav-button:first-of-type');
+  const next = overlay.querySelector('.nav-button:last-of-type');
+  if (!prev || !next) return;
+  if (e.target === prev) {
+    overlay.dataset.offset = String(Number(overlay.dataset.offset || 0) - 1);
+    // clear any selected week when changing month
+    delete overlay.dataset.selectedWeek;
+    renderReportOverlay();
+  }
+  if (e.target === next) {
+    overlay.dataset.offset = String(Number(overlay.dataset.offset || 0) + 1);
+    // clear any selected week when changing month
+    delete overlay.dataset.selectedWeek;
+    renderReportOverlay();
+  }
+});
 
 function renderReportOverlay() {
   const content = document.getElementById('report-overlay-content');
   if (!content) return;
+  const overlay = document.getElementById('report-overlay');
+  if (!overlay) return;
+  // overlay may carry a dataset.offset (in months) for the report navigator
+  const offset = Number(overlay.dataset.offset || 0);
   const view = (document.getElementById('report-overlay') || {}).dataset?.reportView || 'week';
-  const scheduled = Array.isArray(scheduledBlocks) ? scheduledBlocks : [];
-  const created = Array.isArray(createdBlocks) ? createdBlocks : [];
+  const rangeLabel = document.getElementById('report-range');
+  // compute a start/end range based on navigator and report view
+  let rangeStart = null;
+  let rangeEnd = null;
+  const base = new Date();
+  if (view === 'month') {
+    const monthView = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+    // default month start/end
+    const monthStart = new Date(monthView.getFullYear(), monthView.getMonth(), 1);
+    const monthEnd = new Date(monthView.getFullYear(), monthView.getMonth() + 1, 0); // last day
+    // check if a specific week within the month is selected
+    const selectedWeek = typeof overlay.dataset.selectedWeek !== 'undefined' ? Number(overlay.dataset.selectedWeek) : null;
+    if (selectedWeek === null || Number.isNaN(selectedWeek)) {
+      rangeStart = monthStart;
+      rangeEnd = monthEnd;
+      if (rangeLabel) rangeLabel.textContent = monthView.toLocaleString('default', { month: 'long', year: 'numeric' });
+    } else {
+      // compute month grid start using same logic as month view to ensure weeks align
+      const startDate = computeMonthStartDate(monthView.getFullYear(), monthView.getMonth());
+      const weekStart = new Date(startDate);
+      weekStart.setDate(startDate.getDate() + selectedWeek * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      rangeStart = weekStart;
+      rangeEnd = weekEnd;
+      if (rangeLabel) rangeLabel.textContent = `Week ${selectedWeek + 1}: ${rangeFormatter.format(rangeStart)} – ${rangeFormatter.format(rangeEnd)}`;
+    }
+  } else {
+    // week view: offset interpreted in weeks relative to current week
+    const ctx = computeWeekContext(offset);
+    rangeStart = new Date(ctx.start);
+    rangeEnd = new Date(ctx.end);
+    if (rangeLabel) rangeLabel.textContent = `${rangeFormatter.format(rangeStart)} – ${rangeFormatter.format(rangeEnd)}`;
+  }
+
+  const scheduledAll = Array.isArray(scheduledBlocks) ? scheduledBlocks : [];
+  const createdAll = Array.isArray(createdBlocks) ? createdBlocks : [];
+  // filter scheduled to the selected navigator range (only absolute-dated blocks)
+  const scheduled = scheduledAll.filter((b) => {
+    if (!b || !b.date) return false;
+    const d = new Date(b.date + 'T00:00:00');
+    const rs = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
+    const re = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate());
+    return d >= rs && d <= re;
+  });
+  const created = createdAll; // keep templates available if needed elsewhere, but aggregates use scheduled only below
   // Prepare aggregated stats from scheduled and created/template blocks
   const aggregates = {};
   scheduled.forEach((b) => {
@@ -281,6 +350,23 @@ if (reportBtn) {
     if (!ov) {
       ov = buildReportOverlay();
       document.body.appendChild(ov);
+      // wire week selector buttons once when overlay is created
+      const weekBtns = ov.querySelectorAll('#report-week-selector .report-week-btn');
+      if (weekBtns && weekBtns.length) {
+        weekBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const wk = btn.dataset.weekIndex;
+            if (ov.dataset.selectedWeek === wk) {
+              delete ov.dataset.selectedWeek;
+            } else {
+              ov.dataset.selectedWeek = wk;
+            }
+            // update visual state
+            weekBtns.forEach((b) => b.classList.toggle('is-active', ov.dataset.selectedWeek === b.dataset.weekIndex));
+            renderReportOverlay();
+          });
+        });
+      }
     }
     renderReportOverlay();
   });
@@ -965,6 +1051,84 @@ function renderMonthView() {
           content.appendChild(el);
         }
       });
+
+      // allow drops into month mini-day cells
+      if (content) {
+        content.addEventListener('dragenter', (e) => {
+          if (hasBlockPayload(e.dataTransfer)) {
+            e.preventDefault();
+            content.classList.add('is-drop-target');
+          }
+        });
+        content.addEventListener('dragover', (e) => {
+          if (hasBlockPayload(e.dataTransfer)) {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          }
+        });
+        content.addEventListener('dragleave', () => content.classList.remove('is-drop-target'));
+        content.addEventListener('drop', (e) => {
+          content.classList.remove('is-drop-target');
+          if (!hasBlockPayload(e.dataTransfer)) return;
+          e.preventDefault();
+          // handle drop onto month cell
+          const payload = parseBlockTransfer(e.dataTransfer);
+          if (!payload) return;
+          // compute duration
+          const durationMinutes = Number(payload.durationMinutes);
+          if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return;
+
+          const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+          // find existing scheduled block by id (move)
+          if (payload && payload.id) {
+            const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
+            if (idx !== -1) {
+              const existing = scheduledBlocks[idx];
+              existing.date = iso;
+              // set dayIndex for week rendering
+              existing.dayIndex = new Date(iso + 'T00:00:00').getDay();
+              // ensure duration fields
+              existing.durationMinutes = durationMinutes;
+              existing.durationSlots = durationSlots;
+              existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+              // leave startSlot unchanged if present; otherwise center it in the day
+              if (typeof existing.startSlot !== 'number') {
+                const mid = Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2);
+                existing.startSlot = Math.max(0, Math.min(mid, TOTAL_SLOTS - durationSlots));
+                existing.startHour = HOURS_VIEW_START + existing.startSlot / SLOTS_PER_HOUR;
+              }
+              saveState();
+              // re-render both views
+              renderMonthView();
+              renderWeekView();
+              renderScheduledBlocksForWeek();
+              return;
+            }
+          }
+
+          // otherwise, create a new scheduled block from template payload
+          if (!payload.name || String(payload.name).trim() === '') return;
+          const scheduledBlock = {
+            id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            name: String(payload.name).trim(),
+            color: payload.color || selectedColor,
+            durationMinutes,
+            durationSlots,
+            durationHours: durationSlots / SLOTS_PER_HOUR,
+            // center in day
+            startSlot: Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)),
+            startHour: HOURS_VIEW_START + Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)) / SLOTS_PER_HOUR,
+            dayIndex: new Date(iso + 'T00:00:00').getDay(),
+            date: iso
+          };
+          scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+          scheduledBlocks.push(scheduledBlock);
+          saveState();
+          renderMonthView();
+          renderWeekView();
+          renderScheduledBlocksForWeek();
+        });
+      }
 
       weekRow.appendChild(col);
     }
@@ -1921,6 +2085,24 @@ navButtons.forEach((button) => {
   button.addEventListener('click', () => {
     const direction = button.dataset.direction === 'prev' ? -1 : 1;
     weekOffset += direction;
+    // If month view is active, re-render the month page and update header accordingly
+    const currentView = gridDays?.dataset?.view || 'week';
+    if (currentView === 'month') {
+      try {
+        // update header range to show month label
+        const now = new Date();
+        const viewMonthDate = new Date(now.getFullYear(), now.getMonth() + weekOffset, 1);
+        headerRange.textContent = viewMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        renderMonthView();
+        // also refresh week surfaces so scheduled blocks remain in sync
+        renderScheduledBlocksForWeek();
+      } catch (err) {
+        console.error('renderMonthView failed on nav', err);
+      }
+      return;
+    }
+
+    // default: week view navigation
     updateHeaderRange();
     renderWeekView();
     // after changing the week view, re-render scheduled blocks so date-anchored
