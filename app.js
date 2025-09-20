@@ -1605,12 +1605,10 @@ function buildScheduledBlockElement(block) {
     element.classList.remove('is-dragging');
     try { window.__timeblock_payload = null; } catch (err) {}
   });
-  const startLabel = typeof block.startHour === 'number' ? formatTimeOfDay(block.startHour) : '';
   element.innerHTML = `
     <div class="time-block__content">
       <span class="time-block__label">${escapeHtml(block.name)}</span>
       <span class="time-block__duration">${durationLabel}</span>
-      <span class="time-block__start">${startLabel}</span>
     </div>
   `;
 
@@ -1705,8 +1703,6 @@ function buildScheduledBlockElement(block) {
           existing.durationSlots = durationSlots;
           existing.durationHours = durationSlots / SLOTS_PER_HOUR;
         }
-        // debug: report computed values for pointer move
-        try { console.debug('move-pointer', { id: block.id, startSlot, startHour: HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR, dayIndex }); } catch (e) {}
         // move DOM element
         const existingEl = appRoot.querySelector(`[data-block-id="${block.id}"]`);
         if (existingEl) {
@@ -1716,18 +1712,6 @@ function buildScheduledBlockElement(block) {
           existingEl.dataset.durationSlots = String(durationSlots);
           existingEl.dataset.dayIndex = String(dayIndex);
           if (dayColumn) existingEl.dataset.date = dayColumn.dataset.date;
-          // update visible start time label
-          let startEl = existingEl.querySelector && existingEl.querySelector('.time-block__start');
-          if (!startEl) {
-            // create the start label if an older DOM element lacks it
-            startEl = document.createElement('span');
-            startEl.className = 'time-block__start';
-            const durEl = existingEl.querySelector && existingEl.querySelector('.time-block__duration');
-            if (durEl && durEl.parentNode) durEl.parentNode.insertBefore(startEl, durEl.nextSibling);
-            else existingEl.appendChild(startEl);
-          }
-          startEl.textContent = formatTimeOfDay(existing.startHour || HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR);
-          try { console.debug('move-pointer.dom', { id: block.id, domStartText: startEl.textContent }); } catch (e) {}
           surface.appendChild(existingEl);
         }
         alignSurfaceBlocks(surface);
@@ -1809,7 +1793,7 @@ function handleSurfaceDrop(event) {
   const dayIndex = dayColumn ? dayColumns.indexOf(dayColumn) : -1;
   if (payload && payload.id) {
     const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
-      if (idx !== -1) {
+    if (idx !== -1) {
       const existing = scheduledBlocks[idx];
       existing.startSlot = startSlot;
       existing.startHour = HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR;
@@ -1817,8 +1801,6 @@ function handleSurfaceDrop(event) {
       if (dayColumn && dayColumn.dataset.date) existing.date = dayColumn.dataset.date;
       existing.durationSlots = durationSlots;
       existing.durationHours = durationSlots / SLOTS_PER_HOUR;
-        // debug: report computed values for native drop
-        try { console.debug('drop-scheduled', { id: payload.id, startSlot, startHour: existing.startHour, dayIndex }); } catch (e) {}
       // move DOM element if present
       const existingEl = appRoot.querySelector(`[data-block-id="${payload.id}"]`);
       dbg('dropping scheduled block', { id: payload.id, startSlot, dayIndex });
@@ -1829,17 +1811,6 @@ function handleSurfaceDrop(event) {
         existingEl.dataset.durationSlots = String(existing.durationSlots);
         existingEl.dataset.dayIndex = String(existing.dayIndex);
         if (dayColumn && dayColumn.dataset.date) existingEl.dataset.date = dayColumn.dataset.date;
-        // update visible start time label after drop
-        let startEl2 = existingEl.querySelector && existingEl.querySelector('.time-block__start');
-        if (!startEl2) {
-          startEl2 = document.createElement('span');
-          startEl2.className = 'time-block__start';
-          const durEl2 = existingEl.querySelector && existingEl.querySelector('.time-block__duration');
-          if (durEl2 && durEl2.parentNode) durEl2.parentNode.insertBefore(startEl2, durEl2.nextSibling);
-          else existingEl.appendChild(startEl2);
-        }
-        startEl2.textContent = formatTimeOfDay(existing.startHour);
-        try { console.debug('drop-scheduled.dom', { id: payload.id, domStartText: startEl2.textContent }); } catch (e) {}
         surface.appendChild(existingEl);
       }
       alignSurfaceBlocks(surface);
