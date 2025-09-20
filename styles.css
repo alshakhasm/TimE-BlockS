@@ -533,13 +533,13 @@ button {
   color: var(--ink);
   font-family: var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: 0.45rem 0.55rem;
+  letter-spacing: 0.08em;
+  padding: 0.42rem 0.5rem;
   border-radius: 0.75rem;
   cursor: pointer;
   transition: transform 200ms ease, box-shadow 200ms ease;
   width: 100%;
-  font-size: 0.70rem;
+  font-size: 0.66rem;
   text-align: center;
   box-sizing: border-box;
   line-height: 1.15;
