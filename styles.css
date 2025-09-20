@@ -351,8 +351,8 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.8rem 0;
-  gap: 0.6rem;
+  padding: 0.4rem 0;
+  gap: 0.5rem;
   align-self: stretch;
   height: 100%;
 }
@@ -362,8 +362,8 @@ button {
   border: none;
   background: transparent;
   color: rgba(200, 200, 210, 0.55);
-  width: 32px;
-  height: 32px;
+  width: 46px;
+  height: 46px;
   border-radius: 0;
   display: grid;
   place-items: center;
@@ -373,10 +373,10 @@ button {
 
 
 .rail-icon {
-  width: 16px;
-  height: 16px;
+  width: 26px;
+  height: 26px;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
