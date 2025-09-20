@@ -109,14 +109,6 @@
   max-height: 100%;
 }
 
-/* Center month title and week headers */
-.month-page__header {
-  display:flex;
-  justify-content:center;
-  align-items:center;
-}
-.month-page__header h2 { margin: 0; }
-
 .week-card__header {
   text-align: center;
   width: 100%;
@@ -130,12 +122,6 @@
   flex-direction: column;
   gap: 1rem;
   align-items: stretch;
-}
-.month-page__header h2 {
-  margin: 0 0 8px 0;
-  color: var(--ink);
-  font-size: 1.2rem;
-  letter-spacing: 0.06em;
 }
 .month-grid {
   width: 100%;
@@ -177,7 +163,7 @@ button {
 
 
 .app-header {
-  padding: 0.65rem 1.6rem 0.65rem 0;
+  padding: 1.1rem 2rem 1.1rem 0;
   border-bottom: 1px solid rgba(245, 245, 240, 0.08);
 }
 
@@ -186,9 +172,9 @@ button {
   margin: 0;
   padding: 0 clamp(1.5rem, 2vw, 2.5rem) 0 1rem;
   display: grid;
-  grid-template-columns: 56px 210px auto;
+  grid-template-columns: 60px 300px auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   position: relative;
   z-index: 1;
 }
@@ -228,12 +214,12 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(24, 24, 32, 0.95);
   color: var(--ink);
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 0.45rem;
+  width: 2.0rem;
+  height: 2.0rem;
+  border-radius: 0.55rem;
   display: grid;
   place-items: center;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
@@ -257,30 +243,61 @@ button {
   appearance: none;
   border: none;
   border-radius: 999px;
-  padding: 0.28rem 0.8rem;
-  font-size: 0.56rem;
-  letter-spacing: 0.18em;
+  padding: 0.45rem 1.05rem;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
   background: transparent;
-  color: rgba(245, 245, 240, 0.55);
+  color: rgba(245, 245, 240, 0.9);
   cursor: pointer;
   transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
 
 .view-toggle.is-active {
-  background: rgba(122, 133, 255, 0.24);
+  background: rgba(122, 133, 255, 0.28);
   color: var(--ink);
-  box-shadow: 0 0 18px rgba(122, 133, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(122, 133, 255, 0.45);
 }
 
 .app-header__range {
   margin-left: 0.75rem;
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.24em;
+  font-size: 0.95rem;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
-  color: rgba(245, 245, 240, 0.68);
+  color: rgba(245, 245, 240, 0.9);
   white-space: nowrap;
+}
+
+.app-header__report {
+  margin-left: 0.75rem;
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: rgba(245,245,245,0.95);
+}
+
+.app-header__report:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.45);
+}
+
+.app-header__report:focus {
+  outline: 2px solid rgba(122,133,255,0.5);
+  outline-offset: 2px;
+}
+
+.app-header__report svg {
+  width: 40px;
+  height: 40px;
+  display: block;
+  color: inherit;
 }
 
 .app-footer {
@@ -312,7 +329,7 @@ button {
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: 56px 144px 1fr;
+  grid-template-columns: 56px 158px 1fr;
   gap: 0;
   align-items: start;
   background: #2d2d2d;
@@ -328,13 +345,13 @@ button {
 
 
 .sidebar-rail {
-  width: 40px;
-  background: linear-gradient(180deg, #1a1a1a 0%, #111 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  width: 56px;
+  background: linear-gradient(180deg, #161616 0%, #0f0f0f 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.6rem 0;
+  padding: 0.8rem 0;
   gap: 0.6rem;
   align-self: stretch;
   height: 100%;
@@ -345,8 +362,8 @@ button {
   border: none;
   background: transparent;
   color: rgba(200, 200, 210, 0.55);
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 0;
   display: grid;
   place-items: center;
@@ -356,10 +373,10 @@ button {
 
 
 .rail-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
-  stroke-width: 1.4;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
@@ -400,26 +417,30 @@ button {
 }
 
 .sidebar {
-  width: 144px;
-  padding: 0.9rem 0.3rem;
+  width: 158px;
+  padding: 0.75rem 0.55rem;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 0.7rem;
-  background: #2d2d2d;
-  border: none;
-  box-shadow: none;
-  transition: width 220ms ease, padding 220ms ease;
+  gap: 0.6rem;
+  background: rgba(10, 10, 18, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+  transition: width 220ms ease, padding 220ms ease, background 220ms ease;
 }
 
 .sidebar__content {
   position: relative;
   overflow: hidden;
-  margin-left: -6px;
+  margin-left: 0;
 }
 
 .sidebar__panel {
   display: none;
   animation: sidebarFade 220ms ease forwards;
+  padding: 0.6rem 0.45rem;
+  background: transparent;
+  border-radius: 8px;
 }
 
 .sidebar__panel.is-active {
@@ -448,7 +469,7 @@ button {
 
 .create-form__group {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.28rem;
 }
 
 .create-form__label {
@@ -478,12 +499,12 @@ button {
 }
 
 .create-form__input {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--divider);
-  border-radius: 0.7rem;
-  padding: 0.5rem 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.55rem;
   font-family: var(--font-sans);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--ink);
 }
 
@@ -496,7 +517,7 @@ button {
   grid-template-columns: repeat(5, max-content);
   column-gap: 6px;
   row-gap: 6px;
-  justify-content: space-between;
+  justify-content: start;
 }
 
 .color-swatch {
@@ -512,7 +533,7 @@ button {
 }
 
 .color-swatch span {
-  width: 18px;
+  width: 14px;
   aspect-ratio: 1 / 1;
   border-radius: 999px;
   display: block;
@@ -526,10 +547,10 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 0.55rem;
+  margin-top: 0.35rem;
   font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -537,7 +558,7 @@ button {
 .block-counter {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.28rem;
   justify-content: space-between;
   width: 100%;
 }
@@ -581,13 +602,13 @@ button {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: color-mix(in srgb, var(--block-color, rgba(79, 70, 229, 1)) 85%, rgba(18, 18, 24, 0.65) 15%);
-  color: rgba(220, 222, 230, 0.88);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
+  gap: 0.45rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: color-mix(in srgb, var(--block-color, rgba(79, 70, 229, 1)) 82%, rgba(10, 12, 18, 0.6) 18%);
+  color: rgba(220, 222, 230, 0.92);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.36);
   cursor: grab;
   user-select: none;
   transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
@@ -637,27 +658,29 @@ button {
 .duration-chips {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+  gap: 0.28rem;
 }
 
 .duration-chip {
   appearance: none;
-  border: 1px solid var(--divider);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--ink);
   border-radius: 999px;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.64rem;
-  letter-spacing: 0.16em;
+  padding: 0.26rem 0.45rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
   cursor: pointer;
-  transition: border-color 200ms ease, box-shadow 200ms ease;
-  min-width: 48px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+  min-width: 44px;
   text-align: center;
 }
 
 .duration-chip--full {
   grid-column: 1 / -1;
   justify-self: stretch;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 .duration-chip.is-selected {
@@ -673,15 +696,15 @@ button {
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 0.42rem 0.5rem;
-  border-radius: 0.75rem;
+  padding: 0.34rem 0.45rem;
+  border-radius: 0.6rem;
   cursor: pointer;
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  transition: transform 160ms ease, box-shadow 160ms ease;
   width: 100%;
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   text-align: center;
   box-sizing: border-box;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .create-form__submit:hover {
@@ -1075,84 +1098,7 @@ button {
   z-index: 1100;
 }
 
-.summary {
-  background: var(--surface);
-  border: 1px solid var(--divider);
-  border-radius: 1.5rem;
-  padding: 1.75rem;
-  box-shadow: 0 30px 60px rgba(9, 12, 22, 0.45);
-  display: grid;
-  gap: 1.5rem;
-}
 
-.summary__header {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.summary__title {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.summary__hint {
-  margin: 0;
-  font-family: var(--font-sans);
-  color: var(--ink-muted);
-  font-size: 0.8rem;
-}
-
-.summary__content {
-  display: grid;
-  gap: 1rem;
-}
-
-.summary-item {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.summary-item__label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--font-sans);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
-.summary-item__name {
-  color: var(--ink);
-}
-
-.summary-item__bar {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 999px;
-  height: 0.55rem;
-  border: 1px solid var(--divider);
-  overflow: hidden;
-  position: relative;
-}
-
-.summary-item__progress {
-  position: absolute;
-  inset: 0;
-  transform-origin: left;
-  transform: scaleX(calc(var(--progress) / 100));
-  background: var(--bar-color);
-  transition: transform 200ms ease;
-}
-
-.summary-item--over .summary-item__bar {
-  border-color: rgba(255, 95, 109, 0.5);
-  box-shadow: 0 0 20px rgba(255, 95, 109, 0.35);
-}
-
-.summary-item--over .summary-item__progress {
-  background: linear-gradient(90deg, #ff5f6d 0%, rgba(255, 95, 109, 0.5) 100%);
-}
 
 @media (max-width: 1080px) {
   .workspace {
