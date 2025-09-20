@@ -700,14 +700,8 @@ const sidebarMarkup = `
             </div>
             <div class="create-form__info">
               <div class="block-counter">
-                <button class="counter-button" type="button" data-step="-1" aria-label="Decrease block count">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8" /></svg>
-                </button>
-                <span id="block-count-display">Blocks: 0</span>
-                <button class="counter-button" type="button" data-step="1" aria-label="Increase block count">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v8M8 12h8" /></svg>
-                </button>
-              </div>
+                  <!-- counter buttons removed per user request -->
+                </div>
             </div>
           </div>
           <div class="create-form__group">
@@ -718,6 +712,7 @@ const sidebarMarkup = `
           </div>
           <button class="create-form__submit" type="button">Create block</button>
           <button id="create-now" class="create-form__submit" type="button" style="margin-top:8px">Create Now</button>
+          <button id="duplicate-last" class="create-form__submit create-form__duplicate" type="button" style="margin-top:8px">Duplicate Last</button>
           <div class="create-form__list" id="created-blocks" aria-live="polite"></div>
         </form>
       </div>
@@ -776,11 +771,13 @@ const durationChips = Array.from(appRoot.querySelectorAll('.duration-chip'));
 const colorSwatches = Array.from(appRoot.querySelectorAll('.color-swatch'));
 const navButtons = Array.from(document.querySelectorAll('[data-direction]'));
 const nameInput = appRoot.querySelector('#task-name');
-const blockCountDisplay = appRoot.querySelector('#block-count-display');
+// blockCountDisplay removed — we no longer show 'Blocks: N' in the sidebar
 const createdBlocksContainer = appRoot.querySelector('#created-blocks');
 const createButton = appRoot.querySelector('.create-form__submit');
 const createNowButton = appRoot.querySelector('#create-now');
-const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button'));
+const duplicateLastButton = appRoot.querySelector('#duplicate-last');
+// counter buttons removed from markup; keep reference for compatibility (empty array)
+const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button')) || [];
 
 // Storage control elements in the footer
 const saveButton = document.querySelector('#save-local');
@@ -1053,10 +1050,7 @@ durationChips.forEach((chip) => {
 });
 
 function renderCreatedBlocks() {
-  if (!blockCountDisplay || !createdBlocksContainer) {
-    return;
-  }
-  blockCountDisplay.textContent = `Blocks: ${createdBlocks.length}`;
+  if (!createdBlocksContainer) return;
   if (createdBlocks.length === 0) {
     createdBlocksContainer.innerHTML = '<p class="create-form__empty">No blocks yet.</p>';
     return;
@@ -1317,7 +1311,8 @@ function getBlockPayloadFromElement(element) {
   const duration = Number(element.dataset.blockDuration);
   return {
     id: element.dataset.blockId || '',
-    name: element.dataset.blockName || 'Untitled block',
+    // Return raw name (may be empty) so callers can enforce a required-name policy
+    name: element.dataset.blockName || '',
     color: element.dataset.blockColor || selectedColor,
     origin: element.dataset.blockOrigin || 'template',
     durationMinutes: Number.isFinite(duration) && duration > 0 ? duration : selectedDuration
@@ -1640,9 +1635,16 @@ function handleSurfaceDrop(event) {
     }
   }
   // continuing for template-origin or new blocks
+  // Enforce named templates: payload.name must exist and be non-empty
+  if (!payload.name || String(payload.name).trim() === '') {
+    // ignore anonymous/template without name
+    dbg('rejecting anonymous template drop', { payload });
+    return;
+  }
+
   const scheduledBlock = {
     id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: payload.name || 'Untitled block',
+    name: String(payload.name).trim(),
     color: payload.color || selectedColor,
     durationMinutes,
     durationSlots,
@@ -1765,9 +1767,18 @@ daySurfaces.forEach((surface) => {
 
 createButton?.addEventListener('click', () => {
   const nameValue = (nameInput?.value || '').trim();
+  if (!nameValue) {
+    // brief UI feedback: focus input and flash outline
+    if (nameInput) {
+      nameInput.classList.add('input--error');
+      nameInput.focus();
+      setTimeout(() => nameInput.classList.remove('input--error'), 900);
+    }
+    return;
+  }
   const block = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: nameValue || 'Untitled block',
+    name: nameValue,
     color: selectedColor,
     duration: selectedDuration
   };
@@ -1781,7 +1792,15 @@ createButton?.addEventListener('click', () => {
 });
 
 createNowButton?.addEventListener('click', () => {
-  const nameValue = (nameInput?.value || '').trim() || 'Untitled block';
+  const nameValue = (nameInput?.value || '').trim();
+  if (!nameValue) {
+    if (nameInput) {
+      nameInput.classList.add('input--error');
+      nameInput.focus();
+      setTimeout(() => nameInput.classList.remove('input--error'), 900);
+    }
+    return;
+  }
   const color = selectedColor;
   const durationMinutes = Number(selectedDuration) || 60;
   const now = new Date();
@@ -1818,30 +1837,38 @@ createNowButton?.addEventListener('click', () => {
   saveState();
 });
 
-counterButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    const step = Number(button.dataset.step);
-    if (Number.isNaN(step)) {
-      return;
-    }
+if (counterButtons && counterButtons.length > 0) {
+  counterButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const step = Number(button.dataset.step);
+      if (Number.isNaN(step)) {
+        return;
+      }
 
-    if (step > 0 && createdBlocks.length > 0) {
-      const blockToDuplicate = createdBlocks[0];
-      createdBlocks.unshift({
-        ...blockToDuplicate,
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      });
-      renderCreatedBlocks();
-      scheduleAutoSave();
-      return;
-    }
-
-    if (step < 0 && createdBlocks.length > 0) {
-      createdBlocks.shift();
-      renderCreatedBlocks();
-      scheduleAutoSave();
-    }
+      if (step > 0 && createdBlocks.length > 0) {
+        const blockToDuplicate = createdBlocks[0];
+        createdBlocks.unshift({
+          ...blockToDuplicate,
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`
+        });
+        renderCreatedBlocks();
+        scheduleAutoSave();
+      }
+    });
   });
+}
+
+// Duplicate last created template into the templates list
+duplicateLastButton?.addEventListener('click', () => {
+  if (!Array.isArray(createdBlocks) || createdBlocks.length === 0) return;
+  const last = createdBlocks[0];
+  const copy = {
+    ...last,
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  };
+  createdBlocks.unshift(copy);
+  renderCreatedBlocks();
+  scheduleAutoSave();
 });
 
 nameInput?.addEventListener('input', () => {
