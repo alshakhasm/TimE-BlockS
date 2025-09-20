@@ -42,5 +42,29 @@
     </footer>
 
     <script src="app.js" type="module"></script>
+    <script>
+      // Poll the special file `__livereaload` and reload the page when it changes.
+      (function() {
+        let last = null;
+        async function check() {
+          try {
+            const res = await fetch('/__livereaload', { cache: 'no-store' });
+            if (!res.ok) return;
+            const text = await res.text();
+            if (last && last !== text) {
+              console.info('Live-reload: change detected, reloading');
+              location.reload(true);
+              return;
+            }
+            last = text;
+          } catch (e) {
+            // ignore network errors
+          }
+        }
+        // initial check and start polling every second
+        check();
+        setInterval(check, 1000);
+      })();
+    </script>
   </body>
 </html>
