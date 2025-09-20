@@ -609,15 +609,17 @@ const durationChipsMarkup = durationOptions
   .join('');
 
 const swatchOptions = [
-  '#6366F1',
-  '#22D3EE',
-  '#10B981',
-  '#F59E0B',
-  '#F97316',
+  // Top row: red variations (from warm red to coral)
   '#EF4444',
+  '#F97316',
+  '#F59E0B',
   '#EC4899',
-  '#8B5CF6',
+  '#EF6A6A',
+  // Second row: blues, teals and greys
   '#0EA5E9',
+  '#22D3EE',
+  '#6366F1',
+  '#8B5CF6',
   '#64748B'
 ];
 
@@ -693,7 +695,6 @@ const sidebarMarkup = `
             <input class="create-form__input" id="task-name" name="task-name" placeholder="e.g. Writing Sprint" type="text" />
           </div>
           <div class="create-form__group">
-            <span class="create-form__label">Accent color</span>
             <div class="color-swatch-grid">
               ${colorSwatchMarkup}
             </div>
