@@ -108,6 +108,8 @@ function buildReportOverlay() {
   weekTab.textContent = 'Week';
   weekTab.dataset.view = 'week';
   weekTab.className = 'report-tab is-active';
+  // ensure initial active color is visible even if stylesheet is overridden
+  weekTab.style.color = '#FFD54F';
   const monthTab = document.createElement('button');
   monthTab.type = 'button';
   monthTab.textContent = 'Month';
@@ -127,12 +129,18 @@ function buildReportOverlay() {
     monthTab.classList.remove('is-active');
     overlay.dataset.reportView = 'week';
     renderReportOverlay();
+    // inline color change to ensure visibility
+    weekTab.style.color = '#FFD54F';
+    monthTab.style.color = 'inherit';
   });
   monthTab.addEventListener('click', () => {
     monthTab.classList.add('is-active');
     weekTab.classList.remove('is-active');
     overlay.dataset.reportView = 'month';
     renderReportOverlay();
+    // inline color change to ensure visibility
+    monthTab.style.color = '#FFD54F';
+    weekTab.style.color = 'inherit';
   });
   return overlay;
 }
@@ -783,7 +791,7 @@ const boardDayNames = Array.from(appRoot.querySelectorAll('.board__day-name'));
 const boardDayDates = Array.from(appRoot.querySelectorAll('.board__day-date'));
 const durationChips = Array.from(appRoot.querySelectorAll('.duration-chip'));
 const colorSwatches = Array.from(appRoot.querySelectorAll('.color-swatch'));
-const navButtons = Array.from(appRoot.querySelectorAll('[data-direction]'));
+const navButtons = Array.from(document.querySelectorAll('[data-direction]'));
 const nameInput = appRoot.querySelector('#task-name');
 const blockCountDisplay = appRoot.querySelector('#block-count-display');
 const createdBlocksContainer = appRoot.querySelector('#created-blocks');
