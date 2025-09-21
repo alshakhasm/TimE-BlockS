@@ -90,15 +90,15 @@
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics-compat.js"></script>
 
     <script>
-      // Your Firebase configuration
+      // Your Firebase configuration (updated)
       const firebaseConfig = {
-        apiKey: "AIzaSyADBTdyF4VP_lGSt4Nm_yq2aVD8uzNcoY",
+        apiKey: "AIzaSyADBTdyF4VP_lGSt4Nm_yq2aVD0uZ_NcoY",
         authDomain: "time-blocks-6efb1.firebaseapp.com",
         projectId: "time-blocks-6efb1",
-        storageBucket: "time-blocks-6efb1.appspot.com",
+        storageBucket: "time-blocks-6efb1.firebasestorage.app",
         messagingSenderId: "355782612823",
-        appId: "1:355782612823:web:71b604179216c5160d012",
-        measurementId: "G-TD9J3TJKP6"
+        appId: "1:355782612823:web:71b6041719216c5160d012",
+        measurementId: "G-TD93JTJP6K"
       };
 
       // Initialize Firebase (namespaced/compat API)
@@ -153,6 +153,21 @@
           return Promise.resolve(fn()).finally(()=>{ btn.disabled = false; btn.textContent = original; });
         }
 
+        function showAuthError(err) {
+          console.warn('Firebase auth error', err);
+          const msg = err?.message || String(err);
+          // Common actionable cases
+          if (/api-key-not-valid|api key not valid/i.test(msg) || /auth\/api-key-not-valid/i.test(err?.code)) {
+            alert('Firebase configuration error: API key not valid. Check your `firebaseConfig` in index.html and ensure the API key is correct and the hosting domain is authorized in the Firebase Console.');
+            return;
+          }
+          if (/domain not authorized/i.test(msg) || /unauthorized-domain/i.test(err?.code)) {
+            alert('Authentication error: This domain is not authorized for your Firebase project. Add the site domain in Firebase Console > Authentication > Authorized domains.');
+            return;
+          }
+          alert(msg);
+        }
+
         window.signup = function signup() {
           const email = signupEmail?.value?.trim() || '';
           const password = signupPass?.value || '';
@@ -161,7 +176,7 @@
           withLoading(signupPass?.nextElementSibling, () =>
             auth.createUserWithEmailAndPassword(email, password)
               .then((cred) => setStatus(`Signed up: ${cred.user?.email || cred.user?.uid}`))
-          ).catch((err) => alert(err?.message || String(err)));
+          ).catch(showAuthError);
         };
 
         window.login = function login() {
@@ -172,7 +187,7 @@
           withLoading(loginPass?.nextElementSibling, () =>
             auth.signInWithEmailAndPassword(email, password)
               .then((cred) => setStatus(`Logged in: ${cred.user?.email || cred.user?.uid}`))
-          ).catch((err) => alert(err?.message || String(err)));
+          ).catch(showAuthError);
         };
 
         window.logout = function logout() {
