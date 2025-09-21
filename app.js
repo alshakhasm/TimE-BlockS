@@ -1691,6 +1691,36 @@ function computeDropSlot(surface, clientY, durationSlots) {
   return Math.min(maxStart, Math.max(0, rawSlot));
 }
 
+// Drop-location highlight utilities
+function ensureDropHighlight(surface) {
+  if (!surface) return null;
+  let hl = surface.querySelector('.day-column__slot-highlight');
+  if (!hl) {
+    hl = document.createElement('div');
+    hl.className = 'day-column__slot-highlight';
+    surface.appendChild(hl);
+  }
+  return hl;
+}
+
+function showDropHighlight(surface, startSlot, durationSlots) {
+  const hl = ensureDropHighlight(surface);
+  if (!hl) return;
+  hl.style.setProperty('--highlight-start', String(startSlot));
+  hl.style.setProperty('--highlight-span', String(Math.max(1, durationSlots)));
+  hl.style.opacity = '1';
+}
+
+function hideDropHighlight(surface) {
+  if (!surface) return;
+  const hl = surface.querySelector('.day-column__slot-highlight');
+  if (hl) hl.style.opacity = '0';
+}
+
+function hideAllDropHighlights() {
+  daySurfaces.forEach((s) => hideDropHighlight(s));
+}
+
 function buildScheduledBlockElement(block) {
   const element = document.createElement('article');
   element.className = 'time-block time-block--scheduled';
@@ -1881,6 +1911,14 @@ function handleSurfaceDragEnter(event) {
   event.preventDefault();
   const surface = event.currentTarget;
   surface.classList.add('is-drop-target');
+  // attempt initial highlight
+  const payload = parseBlockTransfer(event.dataTransfer);
+  if (payload) {
+    const durationMinutes = Number(payload.durationMinutes);
+    const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+    const startSlot = computeDropSlot(surface, event.clientY, durationSlots);
+    showDropHighlight(surface, startSlot, durationSlots);
+  }
 }
 
 function handleSurfaceDragOver(event) {
@@ -1891,6 +1929,15 @@ function handleSurfaceDragOver(event) {
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'copy';
   }
+  // update highlight position while dragging
+  const surface = event.currentTarget;
+  const payload = parseBlockTransfer(event.dataTransfer);
+  if (payload) {
+    const durationMinutes = Number(payload.durationMinutes);
+    const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+    const startSlot = computeDropSlot(surface, event.clientY, durationSlots);
+    showDropHighlight(surface, startSlot, durationSlots);
+  }
 }
 
 function handleSurfaceDragLeave(event) {
@@ -1898,12 +1945,14 @@ function handleSurfaceDragLeave(event) {
   const related = event.relatedTarget;
   if (!surface.contains(related)) {
     surface.classList.remove('is-drop-target');
+    hideDropHighlight(surface);
   }
 }
 
 function handleSurfaceDrop(event) {
   const surface = event.currentTarget;
   surface.classList.remove('is-drop-target');
+  hideDropHighlight(surface);
   if (!hasBlockPayload(event.dataTransfer)) {
     return;
   }
