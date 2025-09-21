@@ -329,14 +329,14 @@ button {
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: 56px 128px 1fr;
+  grid-template-columns: 48px 158px 1fr;
   gap: 0;
   align-items: stretch;
   background: #2d2d2d;
 }
 
 .workspace[data-sidebar='collapsed'] {
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 48px 1fr;
 }
 
 .workspace[data-sidebar='collapsed'] .sidebar {
@@ -345,7 +345,7 @@ button {
 
 
 .sidebar-rail {
-  width: 56px;
+  width: 48px;
   background: linear-gradient(180deg, #161616 0%, #0f0f0f 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
@@ -362,8 +362,8 @@ button {
   border: none;
   background: transparent;
   color: rgba(200, 200, 210, 0.55);
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   border-radius: 0;
   display: grid;
   place-items: center;
@@ -373,8 +373,8 @@ button {
 
 
 .rail-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   stroke: var(--rail-icon-color, currentColor);
   stroke-width: 1.8;
   stroke-linecap: round;
@@ -417,7 +417,7 @@ button {
 }
 
 .sidebar {
-  width: 128px;
+  width: 158px;
   padding: 0.75rem 0.55rem;
   display: grid;
   grid-template-rows: auto 1fr;
