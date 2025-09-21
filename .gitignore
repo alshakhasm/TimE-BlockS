@@ -1,0 +1,15 @@
+# OS / Editor
+.DS_Store
+*.log
+
+# Node
+node_modules/
+
+# Build
+.dist/
+build/
+dist/
+
+# Local env
+.env
+.env.local

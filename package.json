@@ -16,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/alshakhasm/TimE-BlockS/issues"
   },
-  "homepage": "https://github.com/alshakhasm/TimE-BlockS#readme"
+  "homepage": "https://github.com/alshakhasm/TimE-BlockS#readme",
+  "dependencies": {
+    "firebase": "^12.3.0"
+  }
 }

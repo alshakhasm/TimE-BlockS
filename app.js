@@ -872,6 +872,9 @@ const saveButton = document.querySelector('#save-local');
 const loadButton = document.querySelector('#load-local');
 const clearButton = document.querySelector('#clear-local');
 const storageStatus = document.querySelector('#storage-status');
+const saveCloudBtn = document.querySelector('#save-cloud');
+const loadCloudBtn = document.querySelector('#load-cloud');
+// Auth UI elements (email/password live in index.html)
 
 let selectedColor = swatchOptions[0];
 let selectedDuration = durationOptions[1] ?? durationOptions[0];
@@ -880,6 +883,8 @@ let scheduledBlocks = [];
 let savedListBlocks = [];
 
 updateHeaderRange();
+
+// No Google sign-in wiring; email/password handled inline in index.html
 
 function renderWeekView() {
   if (!gridDays) {
@@ -1360,6 +1365,8 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     if (storageStatus) storageStatus.textContent = 'Saved ✓';
+    // Schedule cloud sync if signed in
+    scheduleCloudSync();
   } catch (error) {
     console.error('Failed to persist planner state', error);
     if (storageStatus) storageStatus.textContent = 'Save failed';
@@ -1468,6 +1475,87 @@ loadButton?.addEventListener('click', () => {
 
 clearButton?.addEventListener('click', () => {
   clearState();
+});
+
+// Cloud save/load using Firestore (compat) if available and user is signed in
+async function saveStateToCloud() {
+  try {
+    const auth = window.firebaseAuth;
+    const db = window.firebaseDb;
+    const user = auth?.currentUser;
+    if (!auth || !db || !user) {
+      if (storageStatus) storageStatus.textContent = 'Sign in to save to cloud';
+      return;
+    }
+    const snapshot = {
+      weekOffset,
+      createdBlocks,
+      scheduledBlocks,
+      savedListBlocks,
+      updatedAt: new Date().toISOString()
+    };
+    await db.collection('users').doc(user.uid).collection('planners').doc('default').set(snapshot, { merge: true });
+    if (storageStatus) storageStatus.textContent = 'Cloud saved ✓';
+  } catch (e) {
+    console.error('Cloud save failed', e);
+    if (storageStatus) storageStatus.textContent = 'Cloud save failed';
+  }
+}
+
+async function loadStateFromCloud() {
+  try {
+    const auth = window.firebaseAuth;
+    const db = window.firebaseDb;
+    const user = auth?.currentUser;
+    if (!auth || !db || !user) {
+      if (storageStatus) storageStatus.textContent = 'Sign in to load from cloud';
+      return;
+    }
+    const docRef = db.collection('users').doc(user.uid).collection('planners').doc('default');
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      if (storageStatus) storageStatus.textContent = 'No cloud data yet';
+      return;
+    }
+    const data = docSnap.data();
+    if (typeof data.weekOffset === 'number') weekOffset = data.weekOffset;
+    if (Array.isArray(data.createdBlocks)) createdBlocks = data.createdBlocks;
+    if (Array.isArray(data.scheduledBlocks)) scheduledBlocks = data.scheduledBlocks;
+    if (Array.isArray(data.savedListBlocks)) savedListBlocks = data.savedListBlocks;
+    // Refresh UI like local load
+    renderCreatedBlocks();
+    renderSavedListBlocks();
+    daySurfaces.forEach((surface) => {
+      const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
+      scheduled.forEach((el) => el.remove());
+    });
+    scheduledBlocks.forEach((block) => {
+      const el = buildScheduledBlockElement(block);
+      let surface = null;
+      if (block.date) surface = daySurfaces.find((s) => s.dataset.date === block.date);
+      const dayIdx = typeof block.dayIndex === 'number' ? block.dayIndex : -1;
+      if (!surface && dayIdx >= 0) surface = daySurfaces[dayIdx];
+      if (surface) surface.appendChild(el);
+    });
+    daySurfaces.forEach((surface) => alignSurfaceBlocks(surface));
+    updateHeaderRange();
+    if (storageStatus) storageStatus.textContent = 'Cloud loaded';
+  } catch (e) {
+    console.error('Cloud load failed', e);
+    if (storageStatus) storageStatus.textContent = 'Cloud load failed';
+  }
+}
+
+saveCloudBtn?.addEventListener('click', () => {
+  if (saveCloudBtn.disabled) return;
+  saveCloudBtn.disabled = true; const old = saveCloudBtn.textContent; saveCloudBtn.textContent = 'Saving…';
+  saveStateToCloud().finally(() => { saveCloudBtn.disabled = false; saveCloudBtn.textContent = old; });
+});
+
+loadCloudBtn?.addEventListener('click', () => {
+  if (loadCloudBtn.disabled) return;
+  loadCloudBtn.disabled = true; const old = loadCloudBtn.textContent; loadCloudBtn.textContent = 'Loading…';
+  loadStateFromCloud().finally(() => { loadCloudBtn.disabled = false; loadCloudBtn.textContent = old; });
 });
 
 // Trash drop zone for deleting scheduled blocks
@@ -1582,6 +1670,24 @@ function scheduleAutoSave() {
   autoSaveTimer = setTimeout(() => {
     saveState();
   }, AUTO_SAVE_DEBOUNCE);
+}
+
+// Debounced cloud sync following local save
+const CLOUD_SYNC_DEBOUNCE = 1500; // ms
+let cloudSyncTimer = null;
+function scheduleCloudSync() {
+  try {
+    const auth = window.firebaseAuth;
+    const db = window.firebaseDb;
+    if (!auth || !db || !auth.currentUser) return; // only if signed in and Firestore ready
+    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(() => {
+      // best-effort; errors are handled inside saveStateToCloud
+      if (typeof saveStateToCloud === 'function') {
+        saveStateToCloud();
+      }
+    }, CLOUD_SYNC_DEBOUNCE);
+  } catch (_) {}
 }
 
 // Hook into mutations that change createdBlocks or scheduledBlocks
@@ -1733,6 +1839,9 @@ function buildScheduledBlockElement(block) {
   element.dataset.blockOrigin = 'scheduled';
   element.dataset.startSlot = String(block.startSlot);
   element.dataset.durationSlots = String(block.durationSlots);
+  if (typeof block.zBoost === 'number') {
+    element.dataset.zboost = String(block.zBoost);
+  }
   if (typeof block.dayIndex === 'number' && block.dayIndex >= 0) {
     element.dataset.dayIndex = String(block.dayIndex);
   }
@@ -1764,6 +1873,23 @@ function buildScheduledBlockElement(block) {
     element.classList.remove('is-dragging');
     try { window.__timeblock_payload = null; } catch (err) {}
     try { hideAllDropHighlights(); } catch (err) {}
+  });
+
+  // Double-click: send this block backward in stacking order (behind overlaps)
+  element.addEventListener('dblclick', () => {
+    try {
+      const surface = element.closest('.day-column__surface');
+      if (!surface) return;
+      const idx = scheduledBlocks.findIndex((b) => b.id === block.id);
+      if (idx === -1) return;
+      const existing = scheduledBlocks[idx];
+      const current = typeof existing.zBoost === 'number' ? existing.zBoost : 0;
+      const next = current - 100; // step back sufficiently to go behind peers
+      existing.zBoost = next;
+      element.dataset.zboost = String(next);
+      alignSurfaceBlocks(surface);
+      saveState();
+    } catch (e) {}
   });
   element.innerHTML = `
     <div class="time-block__content">
@@ -2042,6 +2168,7 @@ function handleSurfaceDrop(event) {
     startSlot,
     startHour: HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR,
     dayIndex,
+    zBoost: 0,
     // store absolute date for anchoring across week navigation
     date: surface.dataset.date || null
   };
@@ -2083,10 +2210,12 @@ function alignSurfaceBlocks(surface) {
     .map((block) => {
       const start = Number(block.dataset.startSlot);
       const span = Number(block.dataset.durationSlots);
+      const zboost = Number(block.dataset.zboost);
       return {
         element: block,
         start: Number.isFinite(start) ? start : 0,
-        end: Number.isFinite(span) ? start + span : start + 1
+        end: Number.isFinite(span) ? start + span : start + 1,
+        zBoost: Number.isFinite(zboost) ? zboost : 0
       };
     })
     .sort((a, b) => a.start - b.start);
@@ -2096,7 +2225,7 @@ function alignSurfaceBlocks(surface) {
     entries.forEach((entry) => {
       if (entry && entry.element && entry.element.parentElement === surface) {
         // higher start -> higher z-index to ensure later blocks appear above earlier overlays
-        const z = 1000 + (Number.isFinite(entry.start) ? entry.start : 0);
+        const z = 1000 + (Number.isFinite(entry.start) ? entry.start : 0) + (Number.isFinite(entry.zBoost) ? entry.zBoost : 0);
         entry.element.style.zIndex = String(z);
         surface.appendChild(entry.element);
       }
@@ -2138,7 +2267,8 @@ function alignSurfaceBlocks(surface) {
           // Mark the later-start block (B) as translucent so both blocks remain readable
           B.element.classList.add('time-block--translucent');
           // ensure top block is visually above overlays
-          B.element.style.zIndex = String(1200 + (Number.isFinite(B.start) ? B.start : 0));
+          const zTop = 1200 + (Number.isFinite(B.start) ? B.start : 0) + (Number.isFinite(B.zBoost) ? B.zBoost : 0);
+          B.element.style.zIndex = String(zTop);
         }
       }
     }

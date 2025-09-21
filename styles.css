@@ -1063,7 +1063,7 @@ button {
 
 .time-block__content {
   display: grid;
-  grid-template-columns: auto 1fr auto; /* start time | name | duration */
+  grid-template-columns: auto minmax(0, 1fr) auto; /* start time | name | duration */
   align-items: center;
   column-gap: 0.6rem;
   position: relative;
@@ -1110,6 +1110,9 @@ button {
   font-size: 0.86rem;
   color: inherit;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   justify-self: center;
 }
 
@@ -1165,10 +1168,12 @@ button {
 }
 .time-block[data-duration-slots="1"] .time-block__label {
   font-size: 0.8rem;
+  font-weight: 550;
 }
 .time-block[data-duration-slots="1"] .time-block__start,
 .time-block[data-duration-slots="1"] .time-block__duration {
   font-size: 0.66rem;
+  letter-spacing: 0.01em;
 }
 
 /* Tighter padding and gaps for 30-minute blocks */
