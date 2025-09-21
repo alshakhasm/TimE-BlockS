@@ -598,15 +598,13 @@ function formatHourLabel(hour) {
 }
 
 function formatTimeOfDay(hour) {
-  const base = new Date();
-  const wholeHours = Math.floor(hour);
-  const minutes = Math.round((hour - wholeHours) * 60);
-  base.setHours(wholeHours, minutes, 0, 0);
-  return new Intl.DateTimeFormat('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  }).format(base);
+  // Compact 24h format without colon: HHMM (e.g., 0930, 1600)
+  let h = Math.floor(hour);
+  let m = Math.round((hour - h) * 60);
+  if (m >= 60) { h += 1; m = 0; }
+  const hh = String(((h % 24) + 24) % 24).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return `${hh}${mm}`;
 }
 
 function formatDurationHours(durationHours) {
