@@ -329,7 +329,7 @@ button {
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: 56px 158px 1fr;
+  grid-template-columns: 56px 128px 1fr;
   gap: 0;
   align-items: stretch;
   background: #2d2d2d;
@@ -417,7 +417,7 @@ button {
 }
 
 .sidebar {
-  width: 158px;
+  width: 128px;
   padding: 0.75rem 0.55rem;
   display: grid;
   grid-template-rows: auto 1fr;
