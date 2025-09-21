@@ -1844,6 +1844,11 @@ function buildScheduledBlockElement(block) {
           existingEl.dataset.durationSlots = String(durationSlots);
           existingEl.dataset.dayIndex = String(dayIndex);
           if (dayColumn) existingEl.dataset.date = dayColumn.dataset.date;
+          // update visible start time label
+          const label = existingEl.querySelector('.time-block__start');
+          try {
+            if (label) label.textContent = formatTimeOfDay(HOURS_VIEW_START + startSlot / SLOTS_PER_HOUR);
+          } catch (e) {}
           surface.appendChild(existingEl);
         }
         alignSurfaceBlocks(surface);
@@ -1943,6 +1948,11 @@ function handleSurfaceDrop(event) {
         existingEl.dataset.durationSlots = String(existing.durationSlots);
         existingEl.dataset.dayIndex = String(existing.dayIndex);
         if (dayColumn && dayColumn.dataset.date) existingEl.dataset.date = dayColumn.dataset.date;
+        // update visible start time label
+        const label = existingEl.querySelector('.time-block__start');
+        try {
+          if (label) label.textContent = formatTimeOfDay(existing.startHour);
+        } catch (e) {}
         surface.appendChild(existingEl);
       }
       alignSurfaceBlocks(surface);
