@@ -1224,7 +1224,6 @@ function renderCreatedBlocks() {
     .map(
       (block) => `
         <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}" data-block-origin="template">
-          <span class="create-form__list-dot" aria-hidden="true"></span>
           <span class="create-form__list-name">${escapeHtml(block.name)}</span>
           <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
         </article>
@@ -1608,7 +1607,6 @@ function buildScheduledBlockElement(block) {
   });
   element.innerHTML = `
     <div class="time-block__content">
-      <span class="time-block__dot" aria-hidden="true"></span>
       <span class="time-block__label">${escapeHtml(block.name)}</span>
       <span class="time-block__duration">${durationLabel}</span>
     </div>
