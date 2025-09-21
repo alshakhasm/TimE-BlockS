@@ -1250,12 +1250,16 @@ function renderCreatedBlocks() {
           ev.dataTransfer.setData('text/plain', payload.id || payload.name || '');
           ev.dataTransfer.effectAllowed = 'copy';
         }
+        try { window.__timeblock_payload = payload; } catch (err) {}
         item.classList.add('is-dragging');
       } catch (e) {
         // ignore
       }
     });
-    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+    item.addEventListener('dragend', () => {
+      item.classList.remove('is-dragging');
+      try { window.__timeblock_payload = null; } catch (err) {}
+    });
   });
 }
 
@@ -1790,8 +1794,9 @@ function buildScheduledBlockElement(block) {
       // compute element under pointer
       const target = document.elementFromPoint(evt.clientX, evt.clientY);
       if (!target) return;
-      const surface = target.closest && target.closest('.day-column__surface');
-      const trash = target.closest && target.closest('#trash-button');
+  const surface = target.closest && target.closest('.day-column__surface');
+  const monthSurface = target.closest && target.closest('.mini-day__content');
+  const trash = target.closest && target.closest('#trash-button');
       if (trash) {
         // delete scheduled
         const idx = scheduledBlocks.findIndex((b) => b.id === block.id);
@@ -1803,7 +1808,7 @@ function buildScheduledBlockElement(block) {
         }
         return;
       }
-      if (surface) {
+  if (surface) {
         // compute drop slot and move
         const slotHeight = surface.getBoundingClientRect().height / (TOTAL_SLOTS + 1);
         const rect = surface.getBoundingClientRect();
@@ -1842,6 +1847,39 @@ function buildScheduledBlockElement(block) {
         try {
           window.__timeblock_recentMove = { id: block.id, ts: Date.now() };
         } catch (err) {}
+      }
+      // month mini-day pointer fallback: move between month cells
+      if (monthSurface) {
+        try {
+          const dayEl = monthSurface.closest('.mini-day');
+          const isoDate = dayEl ? dayEl.dataset.date : null;
+          const dayIndex = dayEl ? days.indexOf(dayEl.querySelector('.mini-day__label')?.textContent?.trim().split('\n')[0] || '') : -1;
+          const idx = scheduledBlocks.findIndex((b) => b.id === block.id);
+          if (idx !== -1) {
+            const existing = scheduledBlocks[idx];
+            existing.date = isoDate || existing.date;
+            existing.dayIndex = typeof existing.date === 'string' ? new Date(existing.date + 'T00:00:00').getDay() : existing.dayIndex;
+            // keep startSlot if present, otherwise center
+            if (typeof existing.startSlot !== 'number') {
+              const mid = Math.floor(TOTAL_SLOTS / 2 - (existing.durationSlots || 1) / 2);
+              existing.startSlot = Math.max(0, Math.min(mid, TOTAL_SLOTS - (existing.durationSlots || 1)));
+              existing.startHour = HOURS_VIEW_START + existing.startSlot / SLOTS_PER_HOUR;
+            }
+            // move DOM element into monthSurface
+            const existingEl = appRoot.querySelector(`[data-block-id="${block.id}"]`);
+            if (existingEl) {
+              existingEl.dataset.date = existing.date;
+              existingEl.dataset.dayIndex = String(existing.dayIndex);
+              monthSurface.appendChild(existingEl);
+            }
+            saveState();
+            // refresh both views to keep UI consistent
+            try { window.__timeblock_recentMove = { id: block.id, ts: Date.now() }; } catch (err) {}
+            renderMonthView();
+            renderWeekView();
+            renderScheduledBlocksForWeek();
+          }
+        } catch (e) {}
       }
     } catch (e) {}
   });
