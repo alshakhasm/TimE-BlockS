@@ -750,23 +750,23 @@ const blockHistoryMarkup = blockHistory
 
 const sidebarRailMarkup = `
   <nav class="sidebar-rail" aria-label="Sidebar">
-    <button class="rail-button is-active" type="button" data-panel="create" aria-pressed="true" title="Create">
+  <button class="rail-button is-active" type="button" data-panel="create" aria-pressed="true" title="Create" style="--rail-icon-color: ${swatchOptions[0] || selectedColor}">
       <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true" role="img">
-        <!-- Document outline with folded corner -->
-        <path d="M4 3h9l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        <path d="M13 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        <!-- Plus icon -->
-        <path d="M12 11v6M9 14h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <!-- Simple plus sign -->
+        <path d="M12 6v12" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" />
+        <path d="M6 12h12" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" />
       </svg>
     </button>
-    <button class="rail-button" type="button" data-panel="list" aria-pressed="false" title="History">
+  <button class="rail-button" type="button" data-panel="list" aria-pressed="false" title="History" style="--rail-icon-color: ${swatchOptions[1] || selectedColor}">
       <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 7h12M6 12h12M6 17h12" />
+        <path d="M8 6 L16 12 L8 18" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
       </svg>
     </button>
-    <button class="rail-button" type="button" data-action="trash" aria-pressed="false" title="Delete block" id="trash-button">
+  <button class="rail-button" type="button" data-action="trash" aria-pressed="false" title="Delete block" id="trash-button" style="--rail-icon-color: ${swatchOptions[2] || selectedColor}">
       <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6M10 6V4h4v2" />
+        <!-- Simple X (close) icon for trash -->
+        <path d="M6 6l12 12" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" />
+        <path d="M18 6L6 18" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" />
       </svg>
     </button>
   </nav>
@@ -1197,6 +1197,7 @@ function setSelectedColor(color) {
     const isMatch = swatch.dataset.color === color;
     swatch.classList.toggle('is-selected', isMatch);
   });
+  // keep rail icon colors fixed to their assigned swatches (do not override here)
 }
 
 colorSwatches.forEach((swatch) => {
@@ -1268,11 +1269,12 @@ function renderSavedListBlocks() {
   savedListContainer.innerHTML = savedListBlocks
     .map(
       (block) => `
-        <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}" data-block-origin="saved">
-          <span class="create-form__list-name">${escapeHtml(block.name)}</span>
-          <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
-        </article>
-      `
+          <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}" data-block-origin="saved">
+            <button class="saved-item__delete" data-saved-id="${block.id}" aria-label="Delete saved item">✕</button>
+            <span class="create-form__list-name">${escapeHtml(block.name)}</span>
+            <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
+          </article>
+        `
     )
     .join('');
 
@@ -1288,13 +1290,34 @@ function renderSavedListBlocks() {
           ev.dataTransfer.setData('text/plain', payload.id || payload.name || '');
           ev.dataTransfer.effectAllowed = 'copy';
         }
+        try { window.__timeblock_payload = payload; } catch (err) {}
         item.classList.add('is-dragging');
       } catch (e) {
         // ignore
       }
     });
-    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+    item.addEventListener('dragend', () => {
+      item.classList.remove('is-dragging');
+      try { window.__timeblock_payload = null; } catch (err) {}
+    });
   });
+
+  // delegated click handler for inline delete buttons
+  savedListContainer.removeEventListener('click', handleSavedListClick);
+  savedListContainer.addEventListener('click', handleSavedListClick);
+}
+
+function handleSavedListClick(e) {
+  const btn = e.target instanceof HTMLElement ? e.target.closest('.saved-item__delete') : null;
+  if (!btn) return;
+  const id = btn.dataset.savedId;
+  if (!id) return;
+  const idx = savedListBlocks.findIndex((b) => b.id === id);
+  if (idx !== -1) {
+    savedListBlocks.splice(idx, 1);
+    renderSavedListBlocks();
+    saveState();
+  }
 }
 
 function loadState() {
@@ -1465,15 +1488,15 @@ if (trashButton) {
     trashButton.classList.remove('is-drop-target');
     if (!hasBlockPayload(e.dataTransfer)) return;
     e.preventDefault();
-    const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
-    let id = raw;
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.scheduledId) id = parsed.scheduledId;
-      // handle template payloads
-      if (parsed && parsed.origin === 'template' && parsed.id) {
-        // remove from createdBlocks
-        const idxTpl = createdBlocks.findIndex((b) => b.id === parsed.id);
+    // Try parsing a structured payload first (handles JSON and window fallback)
+    const payload = parseBlockTransfer(e.dataTransfer) || (typeof window !== 'undefined' ? window.__timeblock_payload : null);
+
+    // If we have an object-like payload, handle by origin
+    if (payload && typeof payload === 'object') {
+      // scheduledId alias
+      const targetId = payload.scheduledId || payload.id;
+      if (payload.origin === 'template' && targetId) {
+        const idxTpl = createdBlocks.findIndex((b) => b.id === targetId);
         if (idxTpl !== -1) {
           createdBlocks.splice(idxTpl, 1);
           renderCreatedBlocks();
@@ -1482,9 +1505,8 @@ if (trashButton) {
         trashButton.classList.remove('is-drop-target');
         return;
       }
-      // handle saved list payloads
-      if (parsed && parsed.origin === 'saved' && parsed.id) {
-        const idxSaved = savedListBlocks.findIndex((b) => b.id === parsed.id);
+      if (payload.origin === 'saved' && targetId) {
+        const idxSaved = savedListBlocks.findIndex((b) => b.id === targetId);
         if (idxSaved !== -1) {
           savedListBlocks.splice(idxSaved, 1);
           renderSavedListBlocks();
@@ -1493,14 +1515,49 @@ if (trashButton) {
         trashButton.classList.remove('is-drop-target');
         return;
       }
-    } catch (err) {
-      // raw text id
+      if (payload.origin === 'scheduled' && targetId) {
+        // remove scheduled block by id
+        const idxSched = scheduledBlocks.findIndex((b) => b.id === targetId);
+        if (idxSched !== -1) {
+          scheduledBlocks.splice(idxSched, 1);
+          const elSched = document.querySelector(`[data-block-id="${targetId}"]`);
+          if (elSched) elSched.remove();
+          saveState();
+        }
+        trashButton.classList.remove('is-drop-target');
+        return;
+      }
+    }
+
+    // fallback: try plain text id from dataTransfer or window payload
+    const raw = (e.dataTransfer && (e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain'))) || '';
+    let id = raw || (payload && typeof payload === 'string' ? payload : '');
+    if (!id && typeof window !== 'undefined' && window.__timeblock_payload && typeof window.__timeblock_payload === 'object') {
+      id = window.__timeblock_payload.id || '';
     }
     if (!id) return;
-    // remove from DOM
+
+    // remove from saved list or created templates if present
+    const idxSavedPlain = savedListBlocks.findIndex((b) => b.id === id);
+    if (idxSavedPlain !== -1) {
+      savedListBlocks.splice(idxSavedPlain, 1);
+      renderSavedListBlocks();
+      saveState();
+      trashButton.classList.remove('is-drop-target');
+      return;
+    }
+    const idxTplPlain = createdBlocks.findIndex((b) => b.id === id);
+    if (idxTplPlain !== -1) {
+      createdBlocks.splice(idxTplPlain, 1);
+      renderCreatedBlocks();
+      saveState();
+      trashButton.classList.remove('is-drop-target');
+      return;
+    }
+
+    // remove from DOM and scheduledBlocks array if scheduled
     const el = document.querySelector(`[data-block-id="${id}"]`);
     if (el) el.remove();
-    // remove from scheduledBlocks array
     const idx = scheduledBlocks.findIndex((b) => b.id === id);
     if (idx !== -1) {
       scheduledBlocks.splice(idx, 1);
@@ -1559,6 +1616,7 @@ function handleCreatedBlockDragStart(event) {
   event.dataTransfer.effectAllowed = 'copy';
   event.dataTransfer.setData('application/json', data);
   event.dataTransfer.setData('text/plain', data);
+  try { window.__timeblock_payload = payload; } catch (err) {}
   target.classList.add('is-dragging');
 }
 
@@ -1566,6 +1624,7 @@ function handleCreatedBlockDragEnd(event) {
   const target = event.target instanceof HTMLElement ? event.target.closest('.create-form__list-item') : null;
   if (target) {
     target.classList.remove('is-dragging');
+    try { window.__timeblock_payload = null; } catch (err) {}
   }
 }
 
