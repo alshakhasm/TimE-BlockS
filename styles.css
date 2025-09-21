@@ -331,7 +331,7 @@ button {
   display: grid;
   grid-template-columns: 56px 158px 1fr;
   gap: 0;
-  align-items: start;
+  align-items: stretch;
   background: #2d2d2d;
 }
 
@@ -351,7 +351,7 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.4rem 0;
+  padding: 0.75rem 0; /* match sidebar vertical padding so top/bottom align */
   gap: 0.5rem;
   align-self: stretch;
   height: 100%;
@@ -427,6 +427,7 @@ button {
   border-radius: 12px;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
   transition: width 220ms ease, padding 220ms ease, background 220ms ease;
+  align-self: stretch;
 }
 
 .sidebar__content {
@@ -622,7 +623,7 @@ button {
 
 .saved-item__delete {
   position: absolute;
-  right: 4px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   width: 18px;
@@ -649,7 +650,7 @@ button {
 /* ensure list items can contain positioned delete button */
 .create-form__list-item {
   position: relative;
-  padding-right: 36px; /* reserve space for inline delete (closer) */
+  padding-right: 48px; /* reserve space for inline delete and avoid overlap */
 }
 
 .create-form__list-item.is-dragging {
@@ -918,13 +919,13 @@ button {
 }
 
 .time-label {
-  font-size: 0.68rem;
-  color: var(--ink-soft);
-  opacity: 0.65;
+  font-size: 0.9rem;
+  color: var(--ink);
+  opacity: 0.85;
   transform: translateY(-50%);
 }
 
-.time-label:nth-child(even) { opacity: 0.77; }
+.time-label:nth-child(even) { opacity: 0.95; }
 
 .grid-days {
   display: grid;
@@ -1056,9 +1057,9 @@ button {
 
 .time-block__content {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto; /* start time | name | duration */
   align-items: center;
-  column-gap: 0.55rem;
+  column-gap: 0.6rem;
   position: relative;
   z-index: 2;
 }
@@ -1112,6 +1113,14 @@ button {
   color: rgba(249, 250, 255, 0.8);
   white-space: nowrap;
   justify-self: end;
+}
+
+.time-block__start {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  font-size: 0.72rem;
+  color: rgba(249, 250, 255, 0.85);
+  white-space: nowrap;
+  justify-self: start;
 }
 
 /* removed color dot */
