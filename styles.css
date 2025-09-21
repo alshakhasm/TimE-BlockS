@@ -151,6 +151,8 @@ body {
 body {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* vertical pad so block edges don’t sit on the hour line */
+  --block-y-pad: -4px;
 }
 
 button {
@@ -1001,8 +1003,8 @@ button {
 .day-column__slot-highlight {
   position: absolute;
   inset-inline: 0.4rem;
-  top: calc(var(--slot-height) * var(--highlight-start));
-  height: calc(var(--slot-height) * var(--highlight-span));
+  top: calc(var(--slot-height) * var(--highlight-start) + var(--block-y-pad));
+  height: calc(var(--slot-height) * var(--highlight-span) - var(--block-y-pad) * 2);
   border-radius: 0.85rem;
   background: rgba(122, 133, 255, 0.28);
   border: 1px solid rgba(122, 133, 255, 0.65);
@@ -1042,8 +1044,8 @@ button {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--block-color) var(--block-border), rgba(249, 250, 255, 0.25));
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-  top: calc(var(--slot-height) * var(--start));
-  height: calc(var(--slot-height) * var(--span));
+  top: calc(var(--slot-height) * var(--start) + var(--block-y-pad));
+  height: calc(var(--slot-height) * var(--span) - var(--block-y-pad) * 2);
   backdrop-filter: blur(7px) saturate(150%);
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
@@ -1155,6 +1157,18 @@ button {
 .time-block__content {
   position: relative;
   z-index: 2;
+}
+
+/* Compact typography for 30-minute blocks (1 slot) */
+.time-block[data-duration-slots="1"] {
+  font-size: 0.74rem;
+}
+.time-block[data-duration-slots="1"] .time-block__label {
+  font-size: 0.8rem;
+}
+.time-block[data-duration-slots="1"] .time-block__start,
+.time-block[data-duration-slots="1"] .time-block__duration {
+  font-size: 0.66rem;
 }
 
 /* When a block is the top item in an overlap, make its background fully opaque
