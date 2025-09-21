@@ -1171,6 +1171,15 @@ button {
   font-size: 0.66rem;
 }
 
+/* Tighter padding and gaps for 30-minute blocks */
+.time-block[data-duration-slots="1"] {
+  padding: 0.42rem 0.5rem; /* was 0.5rem 0.7rem */
+  border-radius: 0.9rem;
+}
+.time-block[data-duration-slots="1"] .time-block__content {
+  column-gap: 0.45rem; /* default 0.6rem */
+}
+
 /* When a block is the top item in an overlap, make its background fully opaque
    so underlying overlays do not show through. */
 .time-block--solid {
