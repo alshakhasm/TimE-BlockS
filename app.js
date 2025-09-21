@@ -799,10 +799,12 @@ const sidebarMarkup = `
           <button class="create-form__submit" type="button">Create block</button>
           <button id="create-now" class="create-form__submit" type="button" style="margin-top:8px">Create Now</button>
           <button id="duplicate-last" class="create-form__submit create-form__duplicate" type="button" style="margin-top:8px">Duplicate Last</button>
+          <button id="add-to-list" class="create-form__submit" type="button" style="margin-top:8px">Add to list</button>
           <div class="create-form__list" id="created-blocks" aria-live="polite"></div>
         </form>
       </div>
       <div class="sidebar__panel sidebar__panel--list" data-panel="list">
+        <div class="create-form__list" id="saved-list-blocks" aria-live="polite"></div>
         <div class="block-history">
           ${blockHistoryMarkup || '<p class="block-history__empty">No blocks logged yet.</p>'}
         </div>
@@ -862,6 +864,8 @@ const createdBlocksContainer = appRoot.querySelector('#created-blocks');
 const createButton = appRoot.querySelector('.create-form__submit');
 const createNowButton = appRoot.querySelector('#create-now');
 const duplicateLastButton = appRoot.querySelector('#duplicate-last');
+const addToListButton = appRoot.querySelector('#add-to-list');
+const savedListContainer = appRoot.querySelector('#saved-list-blocks');
 // counter buttons removed from markup; keep reference for compatibility (empty array)
 const counterButtons = Array.from(appRoot.querySelectorAll('.counter-button')) || [];
 
@@ -875,6 +879,7 @@ let selectedColor = swatchOptions[0];
 let selectedDuration = durationOptions[1] ?? durationOptions[0];
 let createdBlocks = [];
 let scheduledBlocks = [];
+let savedListBlocks = [];
 
 updateHeaderRange();
 
@@ -1253,6 +1258,45 @@ function renderCreatedBlocks() {
   });
 }
 
+function renderSavedListBlocks() {
+  if (!savedListContainer) return;
+  if (!Array.isArray(savedListBlocks) || savedListBlocks.length === 0) {
+    savedListContainer.innerHTML = '<p class="create-form__empty">No saved items.</p>';
+    return;
+  }
+
+  savedListContainer.innerHTML = savedListBlocks
+    .map(
+      (block) => `
+        <article class="create-form__list-item" draggable="true" style="--block-color:${block.color}" data-block-id="${block.id}" data-block-name="${escapeHtml(block.name)}" data-block-color="${block.color}" data-block-duration="${block.duration}" data-block-origin="saved">
+          <span class="create-form__list-name">${escapeHtml(block.name)}</span>
+          <span class="create-form__list-duration">${formatDurationLabel(block.duration)}</span>
+        </article>
+      `
+    )
+    .join('');
+
+  const items = Array.from(savedListContainer.querySelectorAll('.create-form__list-item'));
+  items.forEach((item) => {
+    item.setAttribute('draggable', 'true');
+    item.addEventListener('dragstart', (ev) => {
+      const payload = getBlockPayloadFromElement(item);
+      if (!payload) return;
+      try {
+        if (ev.dataTransfer) {
+          ev.dataTransfer.setData('application/json', JSON.stringify(payload));
+          ev.dataTransfer.setData('text/plain', payload.id || payload.name || '');
+          ev.dataTransfer.effectAllowed = 'copy';
+        }
+        item.classList.add('is-dragging');
+      } catch (e) {
+        // ignore
+      }
+    });
+    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+  });
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -1270,6 +1314,9 @@ function loadState() {
       if (Array.isArray(parsed.scheduledBlocks)) {
         scheduledBlocks = parsed.scheduledBlocks;
       }
+      if (Array.isArray(parsed.savedListBlocks)) {
+        savedListBlocks = parsed.savedListBlocks;
+      }
     }
   } catch (error) {
     console.warn('Failed to load saved planner state', error);
@@ -1280,7 +1327,8 @@ function saveState() {
   const snapshot = {
     weekOffset,
     createdBlocks,
-    scheduledBlocks
+    scheduledBlocks,
+    savedListBlocks
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -1298,6 +1346,7 @@ updateHeaderRange();
 renderWeekView();
 setSelectedColor(selectedColor);
 renderCreatedBlocks();
+renderSavedListBlocks();
 
 // After initial load, render any scheduled blocks into the surfaces
 if (Array.isArray(scheduledBlocks) && scheduledBlocks.length > 0) {
@@ -1327,7 +1376,9 @@ function clearState() {
     weekOffset = 0;
     createdBlocks = [];
     scheduledBlocks = [];
+    savedListBlocks = [];
     renderCreatedBlocks();
+    renderSavedListBlocks();
     daySurfaces.forEach((surface) => {
       const scheduled = Array.from(surface.querySelectorAll('.time-block--scheduled'));
       scheduled.forEach((el) => el.remove());
@@ -1365,6 +1416,7 @@ saveButton?.addEventListener('click', () => {
 loadButton?.addEventListener('click', () => {
   loadState();
   renderCreatedBlocks();
+  renderSavedListBlocks();
   // Re-render scheduled blocks from loaded data
   daySurfaces.forEach((surface) => {
     // remove existing
@@ -1425,6 +1477,17 @@ if (trashButton) {
         if (idxTpl !== -1) {
           createdBlocks.splice(idxTpl, 1);
           renderCreatedBlocks();
+          saveState();
+        }
+        trashButton.classList.remove('is-drop-target');
+        return;
+      }
+      // handle saved list payloads
+      if (parsed && parsed.origin === 'saved' && parsed.id) {
+        const idxSaved = savedListBlocks.findIndex((b) => b.id === parsed.id);
+        if (idxSaved !== -1) {
+          savedListBlocks.splice(idxSaved, 1);
+          renderSavedListBlocks();
           saveState();
         }
         trashButton.classList.remove('is-drop-target');
@@ -2052,6 +2115,32 @@ duplicateLastButton?.addEventListener('click', () => {
   };
   createdBlocks.unshift(copy);
   renderCreatedBlocks();
+  scheduleAutoSave();
+});
+
+// Add current create-form block to Saved List panel
+addToListButton?.addEventListener('click', () => {
+  const nameValue = (nameInput?.value || '').trim();
+  if (!nameValue) {
+    if (nameInput) {
+      nameInput.classList.add('input--error');
+      nameInput.focus();
+      setTimeout(() => nameInput.classList.remove('input--error'), 900);
+    }
+    return;
+  }
+  const block = {
+    id: `saved-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: nameValue,
+    color: selectedColor,
+    duration: selectedDuration
+  };
+  savedListBlocks.unshift(block);
+  renderSavedListBlocks();
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.focus();
+  }
   scheduleAutoSave();
 });
 
