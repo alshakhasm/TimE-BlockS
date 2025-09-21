@@ -1608,6 +1608,7 @@ function buildScheduledBlockElement(block) {
   });
   element.innerHTML = `
     <div class="time-block__content">
+      <span class="time-block__dot" aria-hidden="true"></span>
       <span class="time-block__label">${escapeHtml(block.name)}</span>
       <span class="time-block__duration">${durationLabel}</span>
     </div>

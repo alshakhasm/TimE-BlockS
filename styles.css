@@ -976,7 +976,7 @@ button {
   position: absolute;
   inset-inline: 0.3rem;
   border-radius: 1rem;
-  padding: 0.6rem 0.9rem;
+  padding: 0.5rem 0.7rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1003,16 +1003,16 @@ button {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--block-color) var(--block-fill), rgba(8, 10, 18, 0.7));
+  background: color-mix(in srgb, var(--block-color) var(--block-fill), rgba(8, 10, 18, 0.72));
   z-index: 0;
   pointer-events: none;
 }
 
 .time-block__content {
-  display: inline-flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
   align-items: center;
-  gap: 0.55rem;
+  column-gap: 0.55rem;
   position: relative;
   z-index: 2;
 }
@@ -1052,18 +1052,29 @@ button {
 
 
 .time-block__label {
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-size: 0.86rem;
   color: inherit;
   white-space: nowrap;
+  justify-self: center;
 }
 
 .time-block__duration {
-  font-size: 0.74rem;
-  color: rgba(249, 250, 255, 0.75);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  font-size: 0.72rem;
+  color: rgba(249, 250, 255, 0.8);
   white-space: nowrap;
+  justify-self: end;
+}
+
+/* left color dot inside scheduled pill */
+.time-block__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--block-color, #10B981);
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.3) inset, 0 2px 6px rgba(0,0,0,0.35);
 }
 
 .time-block--align-start {
