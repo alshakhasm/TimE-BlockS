@@ -375,7 +375,7 @@ if (reportBtn) {
 let weekOffset = 0;
 
 // Debugging switch: set to `true` to enable on-screen debug logs
-const DEBUG = false;
+const DEBUG = true;
 
 // Debug panel (on-screen) to help trace drag/drop during development (only when DEBUG=true)
 const debugPanel = (() => {
@@ -487,7 +487,8 @@ try {
       if (!el) return;
       const surface = el.closest && el.closest('.day-column__surface');
       const trash = el.closest && el.closest('#trash-button');
-      if (surface || trash) {
+      const monthSurface = el.closest && el.closest('.mini-day__content');
+      if (surface || trash || monthSurface) {
         e.preventDefault();
       }
     } catch (err) {}
@@ -498,10 +499,13 @@ try {
       const el = document.elementFromPoint(e.clientX, e.clientY);
       if (!el) return;
       const surface = el.closest && el.closest('.day-column__surface');
-      const trash = el.closest && el.closest('#trash-button');
-
-      if (surface) {
-        // craft a minimal event object for the handler
+      const monthSurface = el.closest && el.closest('.mini-day__content');
+      const payloadExists = hasBlockPayload(e.dataTransfer) || (typeof window !== 'undefined' && Boolean(window.__timeblock_payload));
+      if ((surface || monthSurface) && payloadExists) {
+        e.preventDefault();
+      }
+      // Forward to week/day surface
+      if (surface && payloadExists) {
         const fakeEvent = {
           currentTarget: surface,
           dataTransfer: e.dataTransfer,
@@ -510,39 +514,68 @@ try {
           preventDefault: () => e.preventDefault()
         };
         handleSurfaceDrop(fakeEvent);
-        // choose a color from any matching scheduled/created block, fallback to accent
-        const colorSource = (scheduled.find((s) => s.name === name) || created.find((c) => c.name === name) || {});
-        const color = escapeHtml(colorSource.color || 'var(--accent,#6366F1)');
-        return `
-          <div class="report-bar-row">
-            <div class="report-bar__meta"><strong>${escapeHtml(name)}</strong><div class="report-bar__sub">Total</div></div>
-            <div class="report-bar"><div class="report-bar__fill" style="width:${pct}%;background:${color}" aria-hidden="true"></div><div class="report-bar__label">${hours.toFixed(2)}h</div></div>
-          </div>
-        `;
-        let id = raw;
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.scheduledId) id = parsed.scheduledId;
-          if (parsed && parsed.origin === 'template' && parsed.id) {
-            const idxTpl = createdBlocks.findIndex((b) => b.id === parsed.id);
-            if (idxTpl !== -1) {
-              createdBlocks.splice(idxTpl, 1);
-              renderCreatedBlocks();
-              saveState();
+        return;
+      }
+      // Handle month cell drop here
+      if (monthSurface && payloadExists) {
+        let payload = parseBlockTransfer(e.dataTransfer) || (typeof window !== 'undefined' ? window.__timeblock_payload : null);
+        if (!payload) return;
+        // normalize duration
+        try { payload.durationMinutes = Number(payload.durationMinutes) || Number(payload.duration) || Number(selectedDuration) || 60; } catch (err) { payload.durationMinutes = Number(selectedDuration) || 60; }
+        const dayEl = monthSurface.closest('.mini-day');
+        const iso = dayEl ? dayEl.dataset.date : null;
+        const durationMinutes = Number(payload.durationMinutes);
+        if (!iso || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return;
+        const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+
+        // Move existing scheduled block
+        if (payload.id) {
+          const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
+          if (idx !== -1) {
+            const existing = scheduledBlocks[idx];
+            existing.date = iso;
+            existing.dayIndex = new Date(iso + 'T00:00:00').getDay();
+            existing.durationMinutes = durationMinutes;
+            existing.durationSlots = durationSlots;
+            existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+            if (typeof existing.startSlot !== 'number') {
+              existing.startSlot = Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2));
+              existing.startHour = HOURS_VIEW_START + existing.startSlot / SLOTS_PER_HOUR;
             }
+            saveState();
+            try { window.__timeblock_recentMove = { id: payload.id, ts: Date.now() }; } catch (err) {}
+            try { window.__timeblock_payload = null; } catch (err) {}
+            renderMonthView();
+            renderWeekView();
+            renderScheduledBlocksForWeek();
+            try { logDrop(payload, iso); } catch (err) {}
             return;
           }
-        } catch (err) {
-          // ignore
         }
-        if (!id) return;
-        const elToRemove = appRoot.querySelector(`[data-block-id="${id}"]`);
-        if (elToRemove) elToRemove.remove();
-        const idx = scheduledBlocks.findIndex((b) => b.id === id);
-        if (idx !== -1) {
-          scheduledBlocks.splice(idx, 1);
-          saveState();
-        }
+
+        // Create a new scheduled block from template/saved
+        if (!payload.name || String(payload.name).trim() === '') return;
+        const scheduledBlock = {
+          id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name: String(payload.name).trim(),
+          color: payload.color || selectedColor,
+          durationMinutes,
+          durationSlots,
+          durationHours: durationSlots / SLOTS_PER_HOUR,
+          startSlot: Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)),
+          startHour: HOURS_VIEW_START + Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)) / SLOTS_PER_HOUR,
+          dayIndex: new Date(iso + 'T00:00:00').getDay(),
+          date: iso
+        };
+        scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+        scheduledBlocks.push(scheduledBlock);
+        saveState();
+        try { window.__timeblock_payload = null; } catch (err) {}
+        renderMonthView();
+        renderWeekView();
+        renderScheduledBlocksForWeek();
+        try { logDrop(scheduledBlock, iso); } catch (err) {}
+        return;
       }
     } catch (err) {
       // swallow
@@ -1072,13 +1105,31 @@ function renderMonthView() {
           }
         });
         content.addEventListener('dragleave', () => content.classList.remove('is-drop-target'));
-        content.addEventListener('drop', (e) => {
+  content.addEventListener('drop', (e) => {
           content.classList.remove('is-drop-target');
+          // debugging: inspect payload sources
+          // log raw dataTransfer values to diagnose browser behavior at drop
+          try {
+            const rawJson = e.dataTransfer ? e.dataTransfer.getData('application/json') : null;
+            const rawText = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+            console.debug('month drop event', { types: e.dataTransfer ? Array.from(e.dataTransfer.types || []) : null, rawJson, rawText, fallback: window.__timeblock_payload });
+          } catch (err) {
+            console.debug('month drop event - unable to read dataTransfer', { err: String(err), fallback: window.__timeblock_payload });
+          }
           if (!hasBlockPayload(e.dataTransfer)) return;
           e.preventDefault();
-          // handle drop onto month cell
-          const payload = parseBlockTransfer(e.dataTransfer);
+          // handle drop onto month cell — prefer parsed transfer, fallback to global payload
+          let payload = parseBlockTransfer(e.dataTransfer);
+          if (!payload && typeof window !== 'undefined' && window.__timeblock_payload) {
+            payload = window.__timeblock_payload;
+          }
+          if (DEBUG) console.debug('month.drop.payload', { payload });
           if (!payload) return;
+          // normalize duration
+          try {
+            payload.durationMinutes = Number(payload.durationMinutes) || Number(payload.duration) || Number(selectedDuration) || 60;
+          } catch (e) { payload.durationMinutes = Number(selectedDuration) || 60; }
+          if (DEBUG) console.debug('doc.drop.normalizedPayload', { payload });
           // compute duration
           const durationMinutes = Number(payload.durationMinutes);
           if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return;
@@ -1107,6 +1158,7 @@ function renderMonthView() {
               renderMonthView();
               renderWeekView();
               renderScheduledBlocksForWeek();
+              try { logDrop(payload, iso); } catch (e) {}
               return;
             }
           }
@@ -1114,7 +1166,8 @@ function renderMonthView() {
           // otherwise, create a new scheduled block from template payload
           if (!payload.name || String(payload.name).trim() === '') return;
           const scheduledBlock = {
-            id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            // Always generate a new id for scheduled items to avoid collisions with templates/saved ids
+            id: `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
             name: String(payload.name).trim(),
             color: payload.color || selectedColor,
             durationMinutes,
@@ -1154,6 +1207,229 @@ function renderMonthView() {
 
 renderWeekView();
 renderScheduledBlocksForWeek();
+
+// Global pointerup fallback: handle pointer-based drags that don't produce dataTransfer
+document.addEventListener('pointerup', (evt) => {
+  try {
+    const payload = (typeof window !== 'undefined' && window.__timeblock_payload) ? window.__timeblock_payload : null;
+    if (!payload) return;
+    // ignore scheduled-origin pointerups here (they have their own handlers)
+    if (payload.origin === 'scheduled') return;
+    const recent = (typeof window !== 'undefined' && window.__timeblock_recentMove) ? window.__timeblock_recentMove : null;
+    // element under pointer
+    const target = document.elementFromPoint(evt.clientX, evt.clientY);
+    const monthSurface = target && target.closest && target.closest('.mini-day__content');
+    if (!monthSurface) return;
+    // avoid duplicate handling if native drop already moved the block very recently
+    if (recent && payload.id && recent.id === payload.id && (Date.now() - (recent.ts || 0)) < 800) {
+      try { window.__timeblock_payload = null; } catch (e) {}
+      return;
+    }
+    const dayEl = monthSurface.closest('.mini-day');
+    const iso = dayEl ? dayEl.dataset.date : null;
+    const durationMinutes = Number(payload.durationMinutes);
+    if (!iso || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      try { window.__timeblock_payload = null; } catch (e) {}
+      return;
+    }
+    const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+
+    // move existing scheduled block if present
+    if (payload.id) {
+      const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
+      if (idx !== -1) {
+        const existing = scheduledBlocks[idx];
+        existing.date = iso;
+        existing.dayIndex = new Date(iso + 'T00:00:00').getDay();
+        existing.durationMinutes = durationMinutes;
+        existing.durationSlots = durationSlots;
+        existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+        if (typeof existing.startSlot !== 'number') {
+          existing.startSlot = Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2));
+          existing.startHour = HOURS_VIEW_START + existing.startSlot / SLOTS_PER_HOUR;
+        }
+        const existingEl = appRoot.querySelector(`[data-block-id="${payload.id}"]`);
+        if (existingEl) {
+          existingEl.dataset.date = existing.date;
+          existingEl.dataset.dayIndex = String(existing.dayIndex);
+          monthSurface.appendChild(existingEl);
+        }
+        saveState();
+        try { window.__timeblock_recentMove = { id: payload.id, ts: Date.now() }; } catch (e) {}
+        try { window.__timeblock_payload = null; } catch (e) {}
+        renderMonthView();
+        renderWeekView();
+        renderScheduledBlocksForWeek();
+        try { logDrop(payload, iso); } catch (e) {}
+        return;
+      }
+    }
+
+    // otherwise create a new scheduled block from template/saved payload
+    if (!payload.name || String(payload.name).trim() === '') {
+      try { window.__timeblock_payload = null; } catch (e) {}
+      return;
+    }
+    const scheduledBlock = {
+      id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: String(payload.name).trim(),
+      color: payload.color || selectedColor,
+      durationMinutes,
+      durationSlots,
+      durationHours: durationSlots / SLOTS_PER_HOUR,
+      startSlot: Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)),
+      startHour: HOURS_VIEW_START + Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)) / SLOTS_PER_HOUR,
+      dayIndex: new Date(iso + 'T00:00:00').getDay(),
+      date: iso
+    };
+    scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+    scheduledBlocks.push(scheduledBlock);
+  try { logDrop(scheduledBlock, scheduledBlock.date || iso); } catch (e) {}
+    saveState();
+    try { window.__timeblock_payload = null; } catch (e) {}
+    renderMonthView();
+    renderWeekView();
+    renderScheduledBlocksForWeek();
+  } catch (e) {
+    // ignore errors in fallback handler
+  }
+});
+
+// Document-level dragover/drop to handle native drag flows that may not reach mini-day handlers
+document.addEventListener('dragover', (e) => {
+  try {
+    // remember last pointer location for debug highlighting and pointer-fallback
+    try { window.__timeblock_lastPointer = { x: e.clientX, y: e.clientY }; } catch (err) {}
+    if (hasBlockPayload(e.dataTransfer)) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    }
+    // diagnostic log to help understand dragover behavior
+    try {
+      if (DEBUG) console.debug('doc.dragover', { x: e.clientX, y: e.clientY, types: e.dataTransfer ? Array.from(e.dataTransfer.types || []) : null, payload: window.__timeblock_payload ? { origin: window.__timeblock_payload.origin, id: window.__timeblock_payload.id, name: window.__timeblock_payload.name } : null });
+    } catch (err) {}
+  } catch (err) {}
+});
+
+// During dragover, highlight the specific month cell under the pointer when payload exists (capture to ensure it runs)
+document.addEventListener('dragover', (e) => {
+  try {
+    const payloadExists = hasBlockPayload(e.dataTransfer) || (typeof window !== 'undefined' && Boolean(window.__timeblock_payload));
+    // clear any previous highlights
+    document.querySelectorAll('.mini-day__content.is-debug-target').forEach((c) => c.classList.remove('is-debug-target'));
+    if (!payloadExists) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const target = el && el.closest && el.closest('.mini-day__content');
+    if (DEBUG) {
+      try {
+        const elInfo = el ? { tag: el.tagName, cls: el.className, id: el.id } : null;
+        const closestDay = el && el.closest ? el.closest('.mini-day') : null;
+        const iso = closestDay ? closestDay.dataset.date : null;
+        dbg('doc-dragover-hit', { x: e.clientX, y: e.clientY, el: elInfo, iso });
+      } catch (err) {}
+    }
+    if (target) {
+      target.classList.add('is-debug-target');
+      // ensure drop is allowed on this target for native DnD
+      try { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
+    }
+  } catch (err) {}
+}, true);
+
+// track pointer movements so the debug highlighter can find the hovered month cell
+document.addEventListener('pointermove', (e) => {
+  try { window.__timeblock_lastPointer = { x: e.clientX, y: e.clientY }; } catch (err) {}
+});
+
+document.addEventListener('drop', (e) => {
+  try {
+    // find if drop landed on a month mini-day content
+    const monthSurface = e.target && e.target.closest && e.target.closest('.mini-day__content');
+    if (!monthSurface) return;
+    // ensure we have a payload (support fallback)
+    // log raw dataTransfer values here as well
+    try {
+      const rawJson = e.dataTransfer ? e.dataTransfer.getData('application/json') : null;
+      const rawText = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+      console.debug('doc.drop event', { types: e.dataTransfer ? Array.from(e.dataTransfer.types || []) : null, rawJson, rawText, fallback: window.__timeblock_payload });
+    } catch (err) {
+      console.debug('doc.drop event - unable to read dataTransfer', { err: String(err), fallback: window.__timeblock_payload });
+    }
+    if (!hasBlockPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    const payload = parseBlockTransfer(e.dataTransfer) || (typeof window !== 'undefined' ? window.__timeblock_payload : null);
+    if (!payload) return;
+    const dayEl = monthSurface.closest('.mini-day');
+    const iso = dayEl ? dayEl.dataset.date : null;
+    if (DEBUG) console.debug('doc.drop.payload', { payload, iso });
+    const durationMinutes = Number(payload.durationMinutes);
+    if (!iso || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return;
+    const durationSlots = Math.max(1, Math.round((durationMinutes / 60) * SLOTS_PER_HOUR));
+
+    // move existing scheduled block if present
+    if (payload.id) {
+      const idx = scheduledBlocks.findIndex((b) => b.id === payload.id);
+      if (idx !== -1) {
+        const existing = scheduledBlocks[idx];
+        existing.date = iso;
+        existing.dayIndex = new Date(iso + 'T00:00:00').getDay();
+        existing.durationMinutes = durationMinutes;
+        existing.durationSlots = durationSlots;
+        existing.durationHours = durationSlots / SLOTS_PER_HOUR;
+        if (typeof existing.startSlot !== 'number') {
+          existing.startSlot = Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2));
+          existing.startHour = HOURS_VIEW_START + existing.startSlot / SLOTS_PER_HOUR;
+        }
+        const existingEl = appRoot.querySelector(`[data-block-id="${payload.id}"]`);
+        if (existingEl) {
+          existingEl.dataset.date = existing.date;
+          existingEl.dataset.dayIndex = String(existing.dayIndex);
+          monthSurface.appendChild(existingEl);
+        }
+        saveState();
+        try { logDrop(payload, iso); } catch (e) {}
+        try { window.__timeblock_recentMove = { id: payload.id, ts: Date.now() }; } catch (e) {}
+        renderMonthView();
+        renderWeekView();
+        renderScheduledBlocksForWeek();
+        try { window.__timeblock_payload = null; } catch (e) {}
+        return;
+      }
+    }
+
+    // otherwise create new scheduled block
+    if (!payload.name || String(payload.name).trim() === '') return;
+    const scheduledBlock = {
+      // Always generate a new id for scheduled items to avoid collisions
+      id: `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: String(payload.name).trim(),
+      color: payload.color || selectedColor,
+      durationMinutes,
+      durationSlots,
+      durationHours: durationSlots / SLOTS_PER_HOUR,
+      startSlot: Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)),
+      startHour: HOURS_VIEW_START + Math.max(0, Math.floor(TOTAL_SLOTS / 2 - durationSlots / 2)) / SLOTS_PER_HOUR,
+      dayIndex: new Date(iso + 'T00:00:00').getDay(),
+      date: iso
+    };
+    scheduledBlock.endHour = scheduledBlock.startHour + scheduledBlock.durationHours;
+    scheduledBlocks.push(scheduledBlock);
+  saveState();
+  try { logDrop(scheduledBlock, scheduledBlock.date); } catch (e) {}
+    try { window.__timeblock_payload = null; } catch (e) {}
+    renderMonthView();
+    renderWeekView();
+    renderScheduledBlocksForWeek();
+  } catch (err) {}
+});
+
+// clear highlights on pointerup and drop to avoid stale visuals
+document.addEventListener('pointerup', () => {
+  try { document.querySelectorAll('.mini-day__content.is-debug-target').forEach((c) => c.classList.remove('is-debug-target')); } catch (e) {}
+});
+document.addEventListener('drop', () => {
+  try { document.querySelectorAll('.mini-day__content.is-debug-target').forEach((c) => c.classList.remove('is-debug-target')); } catch (e) {}
+});
 
 function setActiveSidebarTab(targetTab) {
   railButtons.forEach((button) => {
@@ -1251,6 +1527,7 @@ function renderCreatedBlocks() {
           ev.dataTransfer.effectAllowed = 'copy';
         }
         try { window.__timeblock_payload = payload; } catch (err) {}
+        if (DEBUG) console.debug('created.dragstart', { payload });
         item.classList.add('is-dragging');
       } catch (e) {
         // ignore
@@ -1258,6 +1535,15 @@ function renderCreatedBlocks() {
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('is-dragging');
+      try { window.__timeblock_payload = null; } catch (err) {}
+    });
+    // pointer fallback: when using trackpad or touch, some browsers don't populate dataTransfer
+    item.addEventListener('pointerdown', (ev) => {
+      const payload = getBlockPayloadFromElement(item);
+      try { if (payload) window.__timeblock_payload = payload; } catch (err) {}
+      if (DEBUG) console.debug('created.pointerdown', { payload });
+    });
+    item.addEventListener('pointerup', () => {
       try { window.__timeblock_payload = null; } catch (err) {}
     });
   });
@@ -1295,6 +1581,7 @@ function renderSavedListBlocks() {
           ev.dataTransfer.effectAllowed = 'copy';
         }
         try { window.__timeblock_payload = payload; } catch (err) {}
+        if (DEBUG) console.debug('saved.dragstart', { payload });
         item.classList.add('is-dragging');
       } catch (e) {
         // ignore
@@ -1302,6 +1589,15 @@ function renderSavedListBlocks() {
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('is-dragging');
+      try { window.__timeblock_payload = null; } catch (err) {}
+    });
+    // pointer fallback for saved items
+    item.addEventListener('pointerdown', (ev) => {
+      const payload = getBlockPayloadFromElement(item);
+      try { if (payload) window.__timeblock_payload = payload; } catch (err) {}
+      if (DEBUG) console.debug('saved.pointerdown', { payload });
+    });
+    item.addEventListener('pointerup', () => {
       try { window.__timeblock_payload = null; } catch (err) {}
     });
   });
@@ -1987,7 +2283,8 @@ function handleSurfaceDrop(event) {
   }
 
   const scheduledBlock = {
-    id: payload.id || `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    // Always generate a new id for scheduled items to avoid collisions with template/saved ids
+    id: `scheduled-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: String(payload.name).trim(),
     color: payload.color || selectedColor,
     durationMinutes,
@@ -2003,6 +2300,7 @@ function handleSurfaceDrop(event) {
   const element = buildScheduledBlockElement(scheduledBlock);
   surface.appendChild(element);
   scheduledBlocks.push(scheduledBlock);
+  try { logDrop(scheduledBlock, scheduledBlock.date || surface.dataset.date || ''); } catch (e) {}
   if (payload.origin === 'template' && payload.id) {
     const index = createdBlocks.findIndex((item) => item.id === payload.id);
     if (index !== -1) {
@@ -2134,6 +2432,80 @@ createButton?.addEventListener('click', () => {
   }
   scheduleAutoSave();
 });
+
+// Debug overlay: shows current global drag payload when present
+function createDebugOverlay() {
+  try {
+    const existing = document.getElementById('debug-drag-overlay');
+    if (existing) return existing;
+    const el = document.createElement('div');
+    el.id = 'debug-drag-overlay';
+    el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99999;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.6);color:#fff;font-family:var(--font-mono);font-size:12px;pointer-events:none;display:none;min-width:180px;';
+    document.body.appendChild(el);
+    return el;
+  } catch (e) { return null; }
+}
+
+const __debugOverlay = createDebugOverlay();
+setInterval(() => {
+  if (!__debugOverlay) return;
+  const payload = (typeof window !== 'undefined' && window.__timeblock_payload) ? window.__timeblock_payload : null;
+  if (payload) {
+    __debugOverlay.style.display = 'block';
+    let iso = '';
+    try {
+      const last = (typeof window !== 'undefined' && window.__timeblock_lastPointer) ? window.__timeblock_lastPointer : null;
+      const el = last ? document.elementFromPoint(last.x, last.y) : null;
+      const day = el && el.closest ? el.closest('.mini-day') : null;
+      iso = day && day.dataset ? ` @ ${day.dataset.date}` : '';
+    } catch (e) {}
+    __debugOverlay.textContent = `DRAG: ${payload.origin || 'unknown'} • ${payload.name || payload.id || ''}${iso}`;
+  } else {
+    __debugOverlay.style.display = 'none';
+    __debugOverlay.textContent = '';
+  }
+}, 120);
+
+// Debug drop log element
+function createDropLog() {
+  try {
+    const existing = document.getElementById('drop-log');
+    if (existing) return existing;
+    const el = document.createElement('div');
+    el.id = 'drop-log';
+    document.body.appendChild(el);
+    return el;
+  } catch (e) { return null; }
+}
+
+const __dropLog = createDropLog();
+
+// highlight potential targets while payload exists
+setInterval(() => {
+  try {
+    const payload = (typeof window !== 'undefined' && window.__timeblock_payload) ? window.__timeblock_payload : null;
+    // clear previous highlights
+    document.querySelectorAll('.mini-day__content.is-debug-target').forEach((c) => c.classList.remove('is-debug-target'));
+    if (!payload) return;
+    // prefer the explicit pointer location if available, otherwise fallback to bounding-box hit testing
+    const last = (typeof window !== 'undefined' && window.__timeblock_lastPointer) ? window.__timeblock_lastPointer : null;
+    let target = null;
+    if (last && last.x != null && last.y != null) {
+      const el = document.elementFromPoint(last.x, last.y);
+      target = el && el.closest && el.closest('.mini-day__content');
+    }
+    if (target) target.classList.add('is-debug-target');
+  } catch (e) {}
+}, 160);
+
+function logDrop(payload, where) {
+  try {
+    if (!__dropLog) return;
+    __dropLog.style.display = 'block';
+    __dropLog.textContent = `DROP: ${payload.origin || 'unknown'} • ${payload.name || payload.id || ''} → ${where || ''}`;
+    setTimeout(() => { if (__dropLog) __dropLog.style.display = 'none'; }, 2200);
+  } catch (e) {}
+}
 
 createNowButton?.addEventListener('click', () => {
   const nameValue = (nameInput?.value || '').trim();
