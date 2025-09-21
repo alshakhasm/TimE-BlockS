@@ -1765,6 +1765,7 @@ function buildScheduledBlockElement(block) {
   element.addEventListener('dragend', () => {
     element.classList.remove('is-dragging');
     try { window.__timeblock_payload = null; } catch (err) {}
+    try { hideAllDropHighlights(); } catch (err) {}
   });
   element.innerHTML = `
     <div class="time-block__content">
@@ -1803,6 +1804,21 @@ function buildScheduledBlockElement(block) {
       }
       if (pointerState.dragging) {
         dragGhost.move(evt.clientX + 12, evt.clientY + 12);
+        // live drop-location highlight while dragging
+        const t = document.elementFromPoint(evt.clientX, evt.clientY);
+        const surface = t && t.closest ? t.closest('.day-column__surface') : null;
+        if (surface) {
+          const slotHeight = surface.getBoundingClientRect().height / (TOTAL_SLOTS + 1);
+          const rect = surface.getBoundingClientRect();
+          const offsetY = evt.clientY - rect.top;
+          const rawSlot = Math.floor(offsetY / slotHeight);
+          const durationSlots = block.durationSlots || Math.max(1, Math.round((block.durationMinutes / 60) * SLOTS_PER_HOUR));
+          const maxStart = Math.max(0, TOTAL_SLOTS - durationSlots);
+          const startSlot = Math.min(maxStart, Math.max(0, rawSlot));
+          try { showDropHighlight(surface, startSlot, durationSlots); } catch (e) {}
+        } else {
+          try { hideAllDropHighlights(); } catch (e) {}
+        }
       }
     } catch (e) {}
 
@@ -1827,6 +1843,7 @@ function buildScheduledBlockElement(block) {
       // restore native draggable behavior
       element.draggable = true;
       element.__usingPointerDrag = false;
+  try { hideAllDropHighlights(); } catch (err) {}
       // compute element under pointer
       const target = document.elementFromPoint(evt.clientX, evt.clientY);
       if (!target) return;
