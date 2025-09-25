@@ -3,6 +3,25 @@
  * collapsible sidebar, palette, weekly board, and budget summary.
  */
 
+// Firestore modular helpers are provided via `window.firebaseDb` (from index.html).
+// We lazily import functions here to keep `app.js` usable as a module in browsers.
+let fbDoc, fbSetDoc, fbGetDoc;
+try {
+  // If running in an environment where the firebase SDK modules are available globally,
+  // prefer using them via dynamic import paths that match the index.html SDK version.
+  // Otherwise, `window.firebaseDb` will still work with compat-style globals if present.
+  ({ doc: fbDoc, setDoc: fbSetDoc, getDoc: fbGetDoc } = await (async () => {
+    try {
+      const mod = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+      return { doc: mod.doc, setDoc: mod.setDoc, getDoc: mod.getDoc };
+    } catch (e) {
+      return { doc: null, setDoc: null, getDoc: null };
+    }
+  })());
+} catch (e) {
+  // ignore; fallback to compat calls below when necessary
+}
+
 const appRoot = document.querySelector('#app');
 const headerRange = document.querySelector('#header-range');
 const STORAGE_KEY = 'timeBlocksState';
@@ -1494,7 +1513,15 @@ async function saveStateToCloud() {
       savedListBlocks,
       updatedAt: new Date().toISOString()
     };
-    await db.collection('users').doc(user.uid).collection('planners').doc('default').set(snapshot, { merge: true });
+    // Prefer modular `setDoc` API when available
+    if (typeof fbSetDoc === 'function' && typeof fbDoc === 'function') {
+      const ref = fbDoc(db, 'users', user.uid, 'planners', 'default');
+      await fbSetDoc(ref, snapshot, { merge: true });
+    } else if (db && typeof db.collection === 'function') {
+      await db.collection('users').doc(user.uid).collection('planners').doc('default').set(snapshot, { merge: true });
+    } else {
+      throw new Error('No Firestore API available');
+    }
     if (storageStatus) storageStatus.textContent = 'Cloud saved ✓';
   } catch (e) {
     console.error('Cloud save failed', e);
@@ -1511,13 +1538,26 @@ async function loadStateFromCloud() {
       if (storageStatus) storageStatus.textContent = 'Sign in to load from cloud';
       return;
     }
-    const docRef = db.collection('users').doc(user.uid).collection('planners').doc('default');
-    const docSnap = await docRef.get();
-    if (!docSnap.exists) {
-      if (storageStatus) storageStatus.textContent = 'No cloud data yet';
-      return;
+    let data = null;
+    if (typeof fbGetDoc === 'function' && typeof fbDoc === 'function') {
+      const ref = fbDoc(db, 'users', user.uid, 'planners', 'default');
+      const docSnap = await fbGetDoc(ref);
+      if (!docSnap.exists()) {
+        if (storageStatus) storageStatus.textContent = 'No cloud data yet';
+        return;
+      }
+      data = docSnap.data();
+    } else if (db && typeof db.collection === 'function') {
+      const docRef = db.collection('users').doc(user.uid).collection('planners').doc('default');
+      const docSnap = await docRef.get();
+      if (!docSnap.exists) {
+        if (storageStatus) storageStatus.textContent = 'No cloud data yet';
+        return;
+      }
+      data = docSnap.data();
+    } else {
+      throw new Error('No Firestore API available');
     }
-    const data = docSnap.data();
     if (typeof data.weekOffset === 'number') weekOffset = data.weekOffset;
     if (Array.isArray(data.createdBlocks)) createdBlocks = data.createdBlocks;
     if (Array.isArray(data.scheduledBlocks)) scheduledBlocks = data.scheduledBlocks;

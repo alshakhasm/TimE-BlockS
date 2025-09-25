@@ -83,13 +83,12 @@
       </section>
     </footer>
 
-    <!-- Firebase SDKs (Compat builds for namespaced API) -->
-    <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics-compat.js"></script>
+    <!-- Firebase modular SDK (ES modules) -->
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+      import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+      import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 
-    <script>
       // Your Firebase configuration (updated)
       const firebaseConfig = {
         apiKey: "AlzaSyARLSXKVb19uiFuyA10H8STVfnMHbDUPW8",
@@ -101,115 +100,102 @@
         measurementId: "G-TD93JTJP6K"
       };
 
-      // Initialize Firebase (namespaced/compat API)
-      const app = firebase.initializeApp(firebaseConfig);
-      const auth = firebase.auth();
-      // Expose globally for modules and other scripts
+      // Initialize Firebase (modular API)
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+
+      // Expose minimal handles for legacy code paths; prefer importing in modules.
       window.firebaseApp = app;
       window.firebaseAuth = auth;
+      window.firebaseDb = db;
       window.firebaseConfig = firebaseConfig;
-      try {
-        if (firebaseConfig.measurementId) {
-          const analytics = firebase.analytics();
-          window.firebaseAnalytics = analytics;
-        }
-      } catch (e) {
-        console.warn('Firebase Analytics not initialized:', e);
-      }
-      try {
-        const db = firebase.firestore();
-        window.firebaseDb = db;
-      } catch (e) {
-        console.warn('Firestore not initialized:', e);
-      }
     </script>
 
-    <!-- Email/Password auth helpers (defined after Firebase init) -->
-    <script>
-      (function () {
-        const auth = window.firebaseAuth || (typeof firebase !== 'undefined' ? firebase.auth?.() : null);
-        if (!auth) {
-          console.warn('Firebase Auth not initialized; email/password UI will be disabled.');
+    <!-- Email/Password auth helpers using modular SDK -->
+    <script type="module">
+      import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+
+      const authHandle = window.firebaseAuth;
+      if (!authHandle) {
+        console.warn('Firebase Auth not initialized; email/password UI will be disabled.');
+      }
+
+      function byId(id) { return document.getElementById(id); }
+      function setStatus(text) { const el = byId('status'); if (el) el.textContent = text; }
+      const emailLogoutBtn = document.getElementById('email-logout');
+      const authForms = document.getElementById('auth-forms');
+      const signupEmail = byId('signup-email');
+      const signupPass = byId('signup-password');
+      const loginEmail = byId('login-email');
+      const loginPass = byId('login-password');
+      const saveCloudBtn = document.getElementById('save-cloud');
+      const loadCloudBtn = document.getElementById('load-cloud');
+
+      // Make globally accessible for inline onclick handlers
+      function validEmail(v){ return /.+@.+\..+/.test(v); }
+      function withLoading(btn, fn){
+        if (!btn) return fn();
+        const original = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Please wait…';
+        return Promise.resolve(fn()).finally(()=>{ btn.disabled = false; btn.textContent = original; });
+      }
+
+      function showAuthError(err) {
+        console.warn('Firebase auth error', err);
+        const msg = err?.message || String(err);
+        if (/api-key-not-valid|api key not valid/i.test(msg) || /auth\/api-key-not-valid/i.test(err?.code)) {
+          alert('Firebase configuration error: API key not valid. Check your `firebaseConfig` in index.html and ensure the API key is correct and the hosting domain is authorized in the Firebase Console.');
           return;
         }
-
-  function byId(id) { return document.getElementById(id); }
-  function setStatus(text) { const el = byId('status'); if (el) el.textContent = text; }
-  const emailLogoutBtn = document.getElementById('email-logout');
-  const authForms = document.getElementById('auth-forms');
-  const signupEmail = byId('signup-email');
-  const signupPass = byId('signup-password');
-  const loginEmail = byId('login-email');
-  const loginPass = byId('login-password');
-  const saveCloudBtn = document.getElementById('save-cloud');
-  const loadCloudBtn = document.getElementById('load-cloud');
-
-        // Make globally accessible for inline onclick handlers
-        function validEmail(v){ return /.+@.+\..+/.test(v); }
-        function withLoading(btn, fn){
-          if (!btn) return fn();
-          const original = btn.textContent;
-          btn.disabled = true; btn.textContent = 'Please wait…';
-          return Promise.resolve(fn()).finally(()=>{ btn.disabled = false; btn.textContent = original; });
+        if (/domain not authorized/i.test(msg) || /unauthorized-domain/i.test(err?.code)) {
+          alert('Authentication error: This domain is not authorized for your Firebase project. Add the site domain in Firebase Console > Authentication > Authorized domains.');
+          return;
         }
+        alert(msg);
+      }
 
-        function showAuthError(err) {
-          console.warn('Firebase auth error', err);
-          const msg = err?.message || String(err);
-          // Common actionable cases
-          if (/api-key-not-valid|api key not valid/i.test(msg) || /auth\/api-key-not-valid/i.test(err?.code)) {
-            alert('Firebase configuration error: API key not valid. Check your `firebaseConfig` in index.html and ensure the API key is correct and the hosting domain is authorized in the Firebase Console.');
-            return;
-          }
-          if (/domain not authorized/i.test(msg) || /unauthorized-domain/i.test(err?.code)) {
-            alert('Authentication error: This domain is not authorized for your Firebase project. Add the site domain in Firebase Console > Authentication > Authorized domains.');
-            return;
-          }
-          alert(msg);
-        }
-
-        window.signup = function signup() {
-          const email = signupEmail?.value?.trim() || '';
-          const password = signupPass?.value || '';
-          if (!validEmail(email)) { alert('Enter a valid email'); return; }
-          if (password.length < 6) { alert('Password must be at least 6 characters'); return; }
-          withLoading(signupPass?.nextElementSibling, () =>
-            auth.createUserWithEmailAndPassword(email, password)
+      window.signup = function signup() {
+        const email = signupEmail?.value?.trim() || '';
+        const password = signupPass?.value || '';
+        if (!validEmail(email)) { alert('Enter a valid email'); return; }
+        if (password.length < 6) { alert('Password must be at least 6 characters'); return; }
+        withLoading(signupPass?.nextElementSibling, () =>
+            createUserWithEmailAndPassword(authHandle, email, password)
               .then((cred) => setStatus(`Signed up: ${cred.user?.email || cred.user?.uid}`))
-          ).catch(showAuthError);
-        };
+        ).catch(showAuthError);
+      };
 
-        window.login = function login() {
-          const email = loginEmail?.value?.trim() || '';
-          const password = loginPass?.value || '';
-          if (!validEmail(email)) { alert('Enter a valid email'); return; }
-          if (!password) { alert('Enter your password'); return; }
-          withLoading(loginPass?.nextElementSibling, () =>
-            auth.signInWithEmailAndPassword(email, password)
-              .then((cred) => setStatus(`Logged in: ${cred.user?.email || cred.user?.uid}`))
-          ).catch(showAuthError);
-        };
+      window.login = function login() {
+        const email = loginEmail?.value?.trim() || '';
+        const password = loginPass?.value || '';
+        if (!validEmail(email)) { alert('Enter a valid email'); return; }
+        if (!password) { alert('Enter your password'); return; }
+        withLoading(loginPass?.nextElementSibling, () =>
+          signInWithEmailAndPassword(authHandle, email, password)
+            .then((cred) => setStatus(`Logged in: ${cred.user?.email || cred.user?.uid}`))
+        ).catch(showAuthError);
+      };
 
-        window.logout = function logout() {
-          auth.signOut().catch((err) => alert(err?.message || String(err)));
-        };
+      window.logout = function logout() {
+        signOut(auth).catch((err) => alert(err?.message || String(err)));
+      };
 
-        auth.onAuthStateChanged((user) => {
-          if (user) {
-            setStatus(`Logged in as: ${user.email || user.uid}`);
-            if (emailLogoutBtn) emailLogoutBtn.hidden = false;
-            if (authForms) authForms.style.display = 'none';
-            if (saveCloudBtn) saveCloudBtn.disabled = false;
-            if (loadCloudBtn) loadCloudBtn.disabled = false;
-          } else {
-            setStatus('Not logged in');
-            if (emailLogoutBtn) emailLogoutBtn.hidden = true;
-            if (authForms) authForms.style.display = '';
-            if (saveCloudBtn) saveCloudBtn.disabled = true;
-            if (loadCloudBtn) loadCloudBtn.disabled = true;
-          }
-        });
-      })();
+  onAuthStateChanged(authHandle, (user) => {
+        if (user) {
+          setStatus(`Logged in as: ${user.email || user.uid}`);
+          if (emailLogoutBtn) emailLogoutBtn.hidden = false;
+          if (authForms) authForms.style.display = 'none';
+          if (saveCloudBtn) saveCloudBtn.disabled = false;
+          if (loadCloudBtn) loadCloudBtn.disabled = false;
+        } else {
+          setStatus('Not logged in');
+          if (emailLogoutBtn) emailLogoutBtn.hidden = true;
+          if (authForms) authForms.style.display = '';
+          if (saveCloudBtn) saveCloudBtn.disabled = true;
+          if (loadCloudBtn) loadCloudBtn.disabled = true;
+        }
+      });
     </script>
 
     <script src="app.js" type="module"></script>
