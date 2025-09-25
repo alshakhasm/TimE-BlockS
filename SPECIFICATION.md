@@ -221,6 +221,7 @@ Derived / transient additions (UI only): selection state, drag payloads, DOM dat
 | FR18 | Debounced cloud sync does not spam writes (>=1.5s separation). | Medium | Rapid consecutive edits produce ≤1 write per debounce window. |
 | FR19 | Firestore rules restrict user data access to owner UID only. | High | Unauthorized access attempts fail (rule simulation). |
 | FR20 | Month/week navigation updates header range text. | Medium | UI header reflects current week or month interval. |
+| FR21 | User can drag a scheduled block onto a list icon to create/save a template. | Medium | Dropped block appears in template (or saved list) and persists after reload. |
 
 ## 18. Non-Functional Requirements (NFR)
 | ID | Category | Requirement | Metric / Target |

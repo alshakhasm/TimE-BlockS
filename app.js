@@ -779,6 +779,12 @@ const sidebarRailMarkup = `
         <path d="M8 6 L16 12 L8 18" stroke="var(--rail-icon-color)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
       </svg>
     </button>
+  <button class="rail-button" type="button" data-action="save-template" aria-pressed="false" title="Save as Template" id="list-drop-button" style="--rail-icon-color: ${swatchOptions[3] || selectedColor}">
+      <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Bookmark / template icon -->
+        <path d="M7 4h10a1 1 0 0 1 1 1v14l-6-3-6 3V5a1 1 0 0 1 1-1z" stroke="var(--rail-icon-color)" fill="none" stroke-width="1.6" stroke-linejoin="round" />
+      </svg>
+    </button>
   <button class="rail-button" type="button" data-action="trash" aria-pressed="false" title="Delete block" id="trash-button" style="--rail-icon-color: ${swatchOptions[2] || selectedColor}">
       <svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true">
         <!-- Simple X (close) icon for trash -->
@@ -1600,6 +1606,53 @@ loadCloudBtn?.addEventListener('click', () => {
 
 // Trash drop zone for deleting scheduled blocks
 const trashButton = document.querySelector('#trash-button');
+const listDropButton = document.querySelector('#list-drop-button');
+if (listDropButton) {
+  const highlight = () => listDropButton.classList.add('is-drop-target');
+  const unhighlight = () => listDropButton.classList.remove('is-drop-target');
+  listDropButton.addEventListener('dragenter', (e) => {
+    if (hasBlockPayload(e.dataTransfer)) { e.preventDefault(); highlight(); }
+  });
+  listDropButton.addEventListener('dragover', (e) => {
+    if (hasBlockPayload(e.dataTransfer)) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
+  });
+  listDropButton.addEventListener('dragleave', () => { unhighlight(); });
+  listDropButton.addEventListener('drop', (e) => {
+    unhighlight();
+    if (!hasBlockPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    const payload = parseBlockTransfer(e.dataTransfer) || (typeof window !== 'undefined' ? window.__timeblock_payload : null);
+    if (!payload || typeof payload !== 'object') return;
+    // Only care about scheduled origin for now. Could extend to template→duplicate.
+    const targetId = payload.scheduledId || payload.id;
+    if (payload.origin === 'scheduled' && targetId) {
+      const sched = scheduledBlocks.find(b => b.id === targetId);
+      if (sched) {
+        // derive template fields
+        const durationMinutes = sched.durationMinutes || (sched.durationHours ? sched.durationHours * 60 : 30);
+        const baseName = sched.name || 'Block';
+        let finalName = baseName;
+        let counter = 2;
+        while (createdBlocks.some(t => t.name === finalName)) {
+          finalName = `${baseName} (${counter++})`;
+        }
+        const newTemplate = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'tpl_' + Math.random().toString(36).slice(2,9),
+          name: finalName,
+          color: sched.color || '#888',
+          duration: durationMinutes
+        };
+        createdBlocks.push(newTemplate);
+        renderCreatedBlocks();
+        saveState();
+        if (typeof window !== 'undefined') {
+          const status = document.getElementById('storage-status');
+          if (status) status.textContent = 'Template saved';
+        }
+      }
+    }
+  });
+}
 if (trashButton) {
   trashButton.addEventListener('dragenter', (e) => {
     if (hasBlockPayload(e.dataTransfer)) {
