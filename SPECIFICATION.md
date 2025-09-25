@@ -195,3 +195,125 @@ Derived / transient additions (UI only): selection state, drag payloads, DOM dat
 ---
 **Document Version:** 1.0  
 **Last Updated:** (auto-generated at creation time)
+
+---
+
+## 17. Functional Requirements (FR)
+| ID | Requirement | Priority | Acceptance Summary |
+|----|-------------|----------|--------------------|
+| FR1 | User can create a block template specifying name, color, duration. | High | Template appears in list and persists locally after save. |
+| FR2 | User can drag a template onto a weekly surface to schedule it. | High | Block renders in correct day/time slot with correct height. |
+| FR3 | User can move a scheduled block to a different day/time via drag. | High | Position updates and persists after auto-save. |
+| FR4 | User can delete a template or scheduled block via trash drop zone. | High | Block removed from state arrays; local save triggered. |
+| FR5 | Local persistence: Save, Load, Clear operations affect full planner state. | High | After refresh, Load restores last saved state. |
+| FR6 | Auto-save triggers on structural mutations (create/delete/schedule). | High | State in localStorage reflects changes within 1s (immediate now). |
+| FR7 | Authenticated user can manually Save to Cloud. | High | Firestore document updated (merge). |
+| FR8 | Authenticated user can Load from Cloud. | High | Local state replaced by remote snapshot. |
+| FR9 | Cloud auto-sync occurs after local save with debounce. | Medium | Within ~1.5s of change while signed in, Firestore snapshot updates. |
+| FR10 | User can sign up (email/password). | High | New account created; UI transitions to logged‑in state. |
+| FR11 | User can log in (email/password). | High | Successful login updates status and enables cloud buttons. |
+| FR12 | User can log out. | High | Status resets; cloud buttons disabled. |
+| FR13 | Reporting overlay shows aggregated hours per block name (week view). | Medium | Opening overlay displays totals consistent with scheduled data. |
+| FR14 | Reporting overlay month navigation adjusts aggregation period. | Medium | Prev/Next changes month label and recalculated totals. |
+| FR15 | Week selection (W1–W4) filters month overlay to that week. | Low | Aggregates reflect only selected week’s scheduled blocks. |
+| FR16 | System prevents cloud save/load when user not authenticated. | High | Buttons disabled or status message shown. |
+| FR17 | Drag ghost shows label during drag operations. | Low | Visible ghost follows cursor. |
+| FR18 | Debounced cloud sync does not spam writes (>=1.5s separation). | Medium | Rapid consecutive edits produce ≤1 write per debounce window. |
+| FR19 | Firestore rules restrict user data access to owner UID only. | High | Unauthorized access attempts fail (rule simulation). |
+| FR20 | Month/week navigation updates header range text. | Medium | UI header reflects current week or month interval. |
+
+## 18. Non-Functional Requirements (NFR)
+| ID | Category | Requirement | Metric / Target |
+|----|----------|-------------|-----------------|
+| NFR1 | Performance | Planner initial render under typical dataset (<150 blocks) | < 500ms on mid-range laptop (informal). |
+| NFR2 | Performance | Cloud save debounce prevents >1 write /1.5s | Observed in logs. |
+| NFR3 | Reliability | Local save cannot throw uncaught exceptions | No console errors in normal flows. |
+| NFR4 | Usability | Core drag actions discoverable without tutorial | User can drag within 30s (observational). |
+| NFR5 | Portability | Runs on static hosting without build step | All assets load via relative paths + CDN. |
+| NFR6 | Security | Firestore rules protect cross-user access | Rules test denies mismatched UID. |
+| NFR7 | Accessibility | Basic ARIA roles for dynamic regions | Live region & labeled buttons present. |
+| NFR8 | Maintainability | Single-file monolith flagged for refactor | Roadmap section present; planned modular splits. |
+| NFR9 | Resilience | Failures in cloud write do not block local operations | Errors logged; UI continues. |
+| NFR10 | Observability | Console diagnostics for major operations | Save/load/auth log lines present when DEBUG or errors. |
+
+## 19. User Stories (US)
+| ID | As a | I want to | So that |
+|----|-------|-----------|---------|
+| US1 | Planner user | Create reusable blocks | Avoid retyping recurring activities. |
+| US2 | Planner user | Place blocks on a weekly calendar | Visualize my planned time distribution. |
+| US3 | Planner user | Adjust timing via drag & drop | Quickly reschedule without forms. |
+| US4 | Planner user | Remove blocks by dragging to trash | Clean up obsolete plans easily. |
+| US5 | Returning user | Load previous plan from local storage | Continue where I left off. |
+| US6 | Authenticated user | Persist plan in the cloud | Access it across devices. |
+| US7 | Authenticated user | Automatically sync changes | Avoid manual save steps. |
+| US8 | Analyst user | View aggregated time usage | Understand allocation patterns. |
+| US9 | New user | Sign up with email/password | Begin using cloud sync. |
+| US10 | Existing user | Login securely | Access my saved plans. |
+| US11 | Privacy-conscious user | Log out | Protect my data on shared machines. |
+| US12 | Power user | Filter reporting by week | Focus analysis on narrower periods. |
+
+## 20. Acceptance Criteria (Selected Mapping)
+| Story/FR | Criteria |
+|----------|---------|
+| FR1 / US1 | After creating a block: appears in template list with correct color/duration; persists after page reload (local save). |
+| FR2 / US2 | Dragging a template into week creates a scheduled block whose start time slot corresponds to drop coordinate (±1 slot tolerance). |
+| FR3 / US3 | Moving a scheduled block updates its internal dayIndex/startSlot; reload retains new position. |
+| FR5 / US5 | Save → Clear (local) → Load restores identical serialized arrays (deep-equality ignoring order of unscheduled arrays). |
+| FR7 / US6 | Cloud Save writes doc with updatedAt; Firestore console shows timestamp within 5s. |
+| FR9 / US7 | Multiple rapid drags (≤5s) produce ≤4 writes (given 1.5s debounce). |
+| FR13 / US8 | Report overlay totals equal sum(durationMinutes)/60 of visible scheduled blocks (rounded to 2 decimals). |
+| FR10 / US9 | Successful signup hides auth forms and enables cloud buttons. |
+| FR11 / US10 | Login sets status text to user email/uid and enables cloud buttons. |
+| FR12 / US11 | Logout disables cloud buttons and shows auth forms again. |
+| FR15 / US12 | Selecting W2 sets overlay label Week 2 and aggregates only blocks whose dates fall in that week window. |
+| FR16 | When logged out, clicking Save Cloud shows status "Sign in to save to cloud" and does not call Firestore API. |
+| FR19 | Attempt to read another UID path via client (spoof) fails with permission denied (rule simulation). |
+
+## 21. Success Metrics / KPIs
+| Metric | Definition | Target (Initial) |
+|--------|------------|------------------|
+| Engagement | Blocks created per active session | >5 median |
+| Retention (local) | % of users returning with restorable state within 7 days | 40% (baseline) |
+| Cloud adoption | % authenticated sessions among total sessions | 25% (initial) |
+| Sync reliability | Successful cloud saves / attempted saves | >95% |
+| Planning density | Scheduled blocks / created templates ratio | >1.2 (indicates actual scheduling, not hoarding) |
+| Error rate | Console errors per session (non-network) | <0.2 |
+
+## 22. Risks & Mitigations
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| API key misconfiguration | Blocks auth & cloud sync | Recreate web app + stricter config validation UI banner. |
+| Monolithic codebase | Slows future features | Progressive modular extraction (reporting, persistence, dnd). |
+| Lack of tests | Regression risk | Introduce unit tests for persistence and aggregation early. |
+| Single Firestore doc growth | Performance / cost | Introduce pruning or weekly archival documents. |
+| No mobile optimization | Reduced adoption | Add responsive layout + touch gestures phase 2. |
+| Alert-based errors | Poor UX | Replace with inline toast / status bar component. |
+
+## 23. Roadmap (High-Level)
+| Phase | Focus | Key Deliverables |
+|-------|-------|------------------|
+| 0 (Now) | Auth fix | Working signup/login (resolve API_KEY_INVALID) |
+| 1 | Stability & Tests | Unit tests, API config validation, modular refactor start |
+| 2 | UX Enhancements | Responsive layout, improved drag handles, inline notifications |
+| 3 | Power Features | Recurring blocks, conflict detection, advanced reporting |
+| 4 | Distribution | PWA packaging, performance tuning, optional build tooling |
+
+## 24. Traceability Matrix (Excerpt)
+| FR | User Story | Section(s) | Notes |
+|----|------------|-----------|-------|
+| FR1 | US1 | 6.2, 20 | Creation flow validated locally |
+| FR2 | US2 | 6.1, 20 | Drag scheduling core |
+| FR5 | US5 | 6.5, 20 | Local persistence stable |
+| FR7 | US6 | 6.6, 20 | Cloud save gated by auth |
+| FR10 | US9 | 6.7, 20 | Blocked by API key issue |
+| FR13 | US8 | 6.8, 20 | Aggregation correctness needed |
+
+## 25. Pending Validation Tasks
+| Task | Blocker | Needed For |
+|------|---------|------------|
+| Resolve API_KEY_INVALID | Config mismatch | Close FR10/FR11 full acceptance |
+| Simulate Firestore rule denial | Test harness missing | FR19 verification |
+| Measure initial render time | No perf logging yet | NFR1 evidence |
+
+---
+**End of Extended Specification**
