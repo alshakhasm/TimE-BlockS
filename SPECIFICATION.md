@@ -318,3 +318,230 @@ Derived / transient additions (UI only): selection state, drag payloads, DOM dat
 
 ---
 **End of Extended Specification**
+
+## 26. UI Layout & Visual Specification
+
+### 26.1 Global Layout Structure
+Overall Composition:
+- Two primary horizontal regions:
+  1. Left Sidebar (rail + active panel)
+  2. Main Planner Area (header + calendar grid + overlays + footer)
+
+Sidebar Width:
+- Target 300px (adaptive). Constraints: min 280px, max 340px (future responsive logic may clamp with media queries).
+- Rail (icon strip) fixed ~56px; panel occupies remaining sidebar width.
+
+Main Planner:
+- Flexible width (fills remaining space using flex: 1 1 auto). Uses internal layout:
+  - Top Header Bar (navigation, view switch, reporting trigger, optional sync state)
+  - Planner Grid Wrapper
+  - Overlays (reporting, dialogs) absolutely positioned with high z-index
+  - Footer / Status (auth controls + persistence status region)
+
+Stacking / Z-Index Guidelines:
+- Base content (grid / sidebar): 0–10
+- Floating drag ghost: 2000 (pointer-events: none)
+- Overlays (report/reporting): 1000 backdrop, 1010 content container
+- Temporary toasts (future): 1500
+
+Scrolling Behavior:
+- Body uses height: 100vh. Sidebar panel can scroll independently (overflow-y: auto) if content exceeds viewport.
+- Day columns may scroll vertically if grid height exceeds viewport (prefer internal scroll within grid wrapper, not body scroll, to keep rail + header visible).
+- Horizontal scroll avoided; grid fits; overflow-x hidden.
+
+Responsiveness (Current Phase):
+- Desktop-first. Below ~900px width no guaranteed layout fidelity. Future enhancements: collapse panel to drawers or convert rail to bottom bar on narrow screens.
+
+### 26.2 Spatial System & Sizing
+- Base spacing unit: 4px increment (4 / 8 / 12 / 16 / 24 / 32).
+- Rail icon button: 48–56px square (padding 12–16px around 24px SVG).
+- Header height: 56px.
+- Footer/auth bar height: 140–160px (flexible given content; can be modularized later).
+- Day column min width: 140px (scales with viewport). Gap between columns: 4–8px.
+- Time slot height: 24px per 30‑min slot (example) OR derived so that a 1‑hour block ~48px (tunable constant).
+- Block minimum display height: 22px (force at least clickable target even for shortest units).
+
+### 26.3 Color System & Tokens
+Foundational Palette (dark theme bias):
+- Background Root: #121212 (token: --color-bg-root)
+- Surface Panel: #1E1E1E (token: --color-surface-panel)
+- Surface Elevated (overlays/cards): #232323 (--color-surface-elevated)
+- Grid Base: #242424 (--color-surface-grid)
+- Divider / Hairline: rgba(255,255,255,0.08) (--color-border-subtle)
+- Divider Strong (focus/active outline): rgba(255,255,255,0.18) (--color-border-strong)
+- Text Primary: #ECECEC (--color-text-primary)
+- Text Muted: #AAAAAA (--color-text-muted)
+- Accent (generic fallback): #4F7DF3 (--color-accent)
+- Success: #2DBE72 (--color-success)
+- Warning: #F2A93B (--color-warning)
+- Error: #E4585A (--color-error)
+- Overlay Backdrop: rgba(0,0,0,0.55) (--color-backdrop)
+- Drop Target Highlight: rgba(255,255,255,0.12) (--color-drop-target)
+
+Block Color Handling:
+- Each `BlockTemplate.color` stored in user data. Text inside blocks (future) should verify contrast ratio ≥ 4.5:1 against white; fallback to dark text if fails.
+- Optionally compute contrast on render and add class `block--low-contrast` to apply alternative text color.
+
+### 26.4 Typography System
+Font Stack: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+Type Scale (px) & Usage:
+- 22: Overlay / Report Title (weight 600–700)
+- 20: Primary Header (week / month label) (600)
+- 18: Section Subheader / Panel Title (600)
+- 16: Form labels / Panel group head (500–600)
+- 14: Body / Buttons / Metadata (400–500)
+- 12: Micro-labels / Hints (400)
+
+Line Heights:
+- Headings: 1.25
+- Body: 1.4
+- Dense metadata rows: 1.2
+
+Weights:
+- Regular 400 base text
+- Medium 500 emphasis
+- Semibold 600 headings & key actions
+- Bold 700 reserved for overlays or strong emphasis only
+
+Letter Spacing:
+- Normal (0) for most; optional +0.5px for uppercase micro labels.
+
+### 26.5 Iconography
+Implementation: Inline SVG with currentColor or explicit stroke referencing var(--rail-icon-color).
+Stroke Guidelines:
+- stroke-width: 1.6–1.8
+- stroke-linecap: round
+- stroke-linejoin: round
+
+Existing Icons:
+- Create: plus symbol (two perpendicular strokes)
+- History/List: angled arrow / play-like path
+- Save Template: bookmark outline (FR21)
+- Trash: X cross strokes
+
+Planned Icons (placeholders):
+- Report: bar chart (three vertical bars of varying heights)
+- Sync: circular arrows (two curved arrows forming a loop)
+- Settings: gear (8-tooth outline)
+
+States:
+- Default: 70–80% opacity / brightness
+- Hover: increase brightness to 100% / add subtle background halo (#FFFFFF10)
+- Active (selected): persistent background (#FFFFFF12) + left accent bar (2–3px) tinted accent color or block color sample
+- Drop Target (trash/list): add class `.is-drop-target` applying background or outline effect
+
+### 26.6 Sidebar Rail
+Structure:
+- `nav.sidebar-rail` containing vertically stacked `.rail-button` elements.
+- Each button: accessible label (title + aria-label), toggles panel or action.
+
+Dimensions:
+- Rail width ~56px; icons ~24px
+- Spacing between icons: 4–8px vertical margin
+
+States / Interaction:
+- `.rail-button.is-active` indicates corresponding panel visible (`aria-pressed="true"`).
+- Keyboard: Tab focus ring (outline: 2px solid var(--color-accent) offset 2px) – to be added if not present.
+- Drop Target classes: `.is-drop-target` sets outline: 2px dashed rgba(255,255,255,0.3) OR background-color: rgba(255,255,255,0.18).
+
+Accessibility:
+- All actionable icons require role="button" (implicit for <button>) and accessible name.
+- Provide tooltip via `title`; consider `aria-describedby` for richer help in future.
+
+### 26.7 Sidebar Panels
+Panels (`.sidebar__panel`) correspond to rail selections:
+- Create Panel: template creation form (name, color swatches, duration chips, quick action buttons [Create Now, Duplicate Last, Add to list]).
+- List / History Panel: placeholder for past or aggregated items (currently history markup placeholder used). Future: saved templates, usage logs.
+
+Panel Content Spacing:
+- Internal padding: 16–20px.
+- Form groups separated by 12–16px vertical space.
+- Swatch grid uses gap: 8px.
+
+### 26.8 Top Header Bar
+Contents (left → right):
+- Week / Month Navigation (Prev, Current label, Next) or unified label component.
+- View Toggle (Week / Month) – currently week primary; month incomplete (FR20 / partial).
+- Report Button: opens overlay (aggregation UI).
+- Storage Status & Cloud Buttons (Save Cloud / Load Cloud) when signed in.
+- Auth status indicator may appear in footer rather than header (current implementation); optional migration to header later.
+
+Behavior:
+- Navigation updates `weekOffset` and re-renders header range text (FR20).
+- View Toggle: applies class to root controlling layout mode (month board placeholder).
+- Report Button: spawns overlay with aggregated data (FR13–FR15 coverage). Ensure focus moves into overlay for accessibility; trap focus until closed.
+
+### 26.9 Planner Grid
+Day Columns:
+- 7 columns (Sun–Sat) with column headers top-aligned.
+- Each column internally a flex/relative container with time slots stacked.
+- Slots optional background stripes (every hour darker/lighter alternate) using nth-child or CSS gradient.
+
+Time Slots:
+- Represent 30‑min increments; height constant (see sizing). Optional border-top per slot with low-opacity divider.
+
+Blocks:
+- Absolutely positioned within day column; top computed from slot index * slotHeight.
+- Height = durationMinutes / 30 * slotHeight.
+- Rounded corners: 4px.
+- Optional subtle shadow for lift (rgba(0,0,0,0.25) 0 2px 4px) – if performance acceptable.
+- Dragging adds class `is-dragging` → reduce opacity (0.75) and maybe scale(0.98).
+
+### 26.10 Overlays (Reporting / Future Dialogs)
+- Centered container width: clamp(600px, 60vw, 960px)
+- Border radius: 8px
+- Background: --color-surface-elevated
+- Backdrop click closes (unless destructive confirm required)
+- Scroll inside content if overflow-y > viewport height minus margins.
+
+### 26.11 Interaction States & Feedback
+Hover: Use subtle background for interactive elements; DO NOT shift layout.
+Active (mouse down): Slight darken background or inset shadow for buttons.
+Focus: Visible 2px outline with adequate contrast (WCAG). Use CSS variable (--focus-ring: 2px solid var(--color-accent)).
+Disabled: Reduce opacity to 50%, remove pointer events.
+Status Messages: Display in `#storage-status` region; color-coded (success/warning/error) using semantic tokens.
+
+### 26.12 Drag & Drop Visuals
+Drag Ghost: Minimal card replicating block color + name (if included). Box-shadow to differentiate from grid.
+Drop Zones:
+- Trash & List Template Save icons: highlight with `.is-drop-target` style.
+- Potential future week edges or overlay import areas (not yet implemented).
+
+### 26.13 Suggested CSS Variable Inventory
+Root Variables:
+```css
+:root {
+  --color-bg-root:#121212;
+  --color-surface-panel:#1E1E1E;
+  --color-surface-grid:#242424;
+  --color-surface-elevated:#232323;
+  --color-border-subtle:rgba(255,255,255,0.08);
+  --color-border-strong:rgba(255,255,255,0.18);
+  --color-text-primary:#ECECEC;
+  --color-text-muted:#AAAAAA;
+  --color-accent:#4F7DF3;
+  --color-success:#2DBE72;
+  --color-warning:#F2A93B;
+  --color-error:#E4585A;
+  --color-backdrop:rgba(0,0,0,0.55);
+  --color-drop-target:rgba(255,255,255,0.12);
+  --focus-ring: 0 0 0 2px var(--color-accent);
+  --slot-height:24px; /* 30-min slot height */
+}
+```
+
+### 26.14 Accessibility Guidelines
+- Color contrast: target ≥ 4.5:1 for text; for large headings (≥18px semi-bold) ≥ 3:1 acceptable.
+- Keyboard navigation: All rail buttons, form inputs, overlay close actions focusable sequentially. Provide ESC key to close overlays.
+- Live Region: `#storage-status` uses aria-live="polite" to announce save/load status.
+- Drag & drop fallback: Provide alternative (future) context menu actions for keyboard-only users.
+
+### 26.15 Future Enhancements (UI Layer)
+- Theming (light mode, high contrast) via swapping root variable sets.
+- Responsive collapse: convert sidebar to icon-only rail with expandable drawer (< 900px width).
+- Animated transitions: micro-fade for block appearance / reposition (use CSS transform not top/left for smoother GPU-accelerated movement).
+- Skeleton loading states when fetching cloud data.
+
+---
+**End UI Layout & Visual Specification (v1)**
