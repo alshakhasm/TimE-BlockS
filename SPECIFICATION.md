@@ -545,3 +545,117 @@ Root Variables:
 
 ---
 **End UI Layout & Visual Specification (v1)**
+
+## 26A. Top Bar (Planner Header) – Detailed Specification
+
+### 26A.1 Purpose & Responsibilities
+The Top Bar provides temporal navigation, view mode switching, entry point to reporting/analytics, and real‑time feedback on storage/sync. It anchors user orientation (which week/month) and exposes core global actions without scrolling.
+
+### 26A.2 Composition (Left → Right Logical Order)
+1. View Mode Toggle (Week | Month) – Month view currently partial; control persists for roadmap alignment.
+2. Navigation Controls – Previous / Next buttons adjusting weekOffset (or month offset when in Month mode).
+3. Date Range Label – Human readable range (e.g., "Sep 22–28, 2025") updated on navigation.
+4. (Optional) Report Button – Opens reporting overlay (aggregated metrics) (FR13–FR15).
+5. Storage / Sync Cluster – Local status text (auto-save, cloud save) + buttons: Save Cloud / Load Cloud (gated by auth).
+6. (Optional Future) Quick Actions: Refresh sync, Settings, Profile avatar.
+
+### 26A.3 Layout & Sizing
+- Container: full-width flex row inside main planner area.
+- Height: 52–56px (consistent with sidebar rail vertical rhythm).
+- Horizontal Padding: 16–20px (responsive; 16px base).
+- Display: `display:flex; align-items:center; gap:12px; justify-content:space-between;`.
+- Multi-Group Handling: Left group (mode + nav + label) uses inline-flex; Right group (report + status + buttons) aligns end.
+
+### 26A.4 Visual Styling
+- Background: #1E1E1E (token: --color-surface-panel) slightly elevated above grid.
+- Bottom Border: 1px solid rgba(255,255,255,0.08) (token: --color-border-subtle).
+- Shadow (optional subtle depth): 0 1px 2px rgba(0,0,0,0.4) – avoid on low-power devices.
+
+### 26A.5 Components Detail
+View Mode Toggle:
+- Two-state segmented control (Week / Month).
+- Implementation: grouped buttons or single toggle cycling states.
+- Active State: background var(--color-accent), color #FFF.
+- Inactive: background transparent; border 1px solid rgba(255,255,255,0.15); color var(--color-text-primary).
+
+Navigation Buttons:
+- Shape: square or subtle rounded (4px).
+- Icon: chevron (left / right) stroke 1.8, size 18–20px.
+- Hover: background rgba(255,255,255,0.08).
+- Disabled (boundary conditions, if any): opacity .4, pointer-events none.
+
+Date Range Label:
+- Typography: 18–20px semibold (weight 600), color var(--color-text-primary).
+- Dynamic update triggered by weekOffset change; supports month roll-over (e.g., "Aug 30 – Sep 5, 2025").
+
+Report Button:
+- Style: ghost or outline variant: background transparent, 1px border rgba(255,255,255,0.18), border-radius 4px, padding 6px 12px.
+- Hover: background rgba(255,255,255,0.07).
+- Active Press: background rgba(255,255,255,0.12).
+- Icon (if added): small bar chart (three bars) left aligned; spacing 6px to label.
+
+Storage / Sync Status:
+- Live region element (aria-live="polite") updating textual status.
+- Default Color: var(--color-text-muted) (#AAAAAA).
+- Success (e.g. "Cloud saved ✓"): #2DBE72 then revert to muted after ~3s (timer).
+- Error (e.g. auth issue): #E4585A.
+- Pending (e.g. "Saving…") can pulse (CSS animation: opacity 0.6 ↔ 1).
+
+Cloud Buttons (Save Cloud / Load Cloud):
+- Primary style alignment with other secondary actions: outline variant.
+- Disabled when not authenticated: add `disabled` attribute + tooltip (title="Sign in to use cloud").
+- Debounce Visual: when saving: swap label to "Saving…" and disable until promise resolves.
+
+### 26A.6 Interaction & State Machine (Simplified)
+States revolve around: {viewMode, weekOffset, isSavingCloud, isLoadingCloud, authState}.
+- View Mode Toggle: on click -> toggle viewMode -> re-render grid container layout.
+- Prev/Next: adjusts offset -> recompute date range -> trigger re-render / alignment.
+- Report: opens overlay -> focus moves into overlay root -> ESC or close returns focus to originating button.
+- Save Cloud: if !auth -> status "Sign in to save to cloud" (no action). Else triggers save, sets isSavingCloud true.
+- Auto-Save Local triggers: update status "Saved locally" and may schedule cloud sync if authenticated.
+
+### 26A.7 Accessibility
+- Provide `aria-label` on navigation buttons ("Previous week", "Next week").
+- Segmented control: role="tablist" or group of toggle buttons with aria-pressed; keep semantics consistent.
+- Live region for status does not spam (debounce rapid updates – collapse multiple consecutive messages into one every 1s max).
+- Focus order: Mode toggle(s) → Prev → Next → Label (static, focus skipped) → Report → Save Cloud → Load Cloud → (rest of content).
+- Keyboard shortcuts (future): Left/Right arrows navigate weeks when header focused; Shift+R open report; Alt+S save cloud.
+
+### 26A.8 Error & Edge Cases
+- Cloud Save Failure: show "Cloud save failed" in error color (#E4585A), optionally a retry button inline.
+- No Changes Pending: Save Cloud may be ignored (optionally disable until dirty state true—future optimization).
+- Month Mode Incomplete: If month view not implemented, month toggle disabled with tooltip "Coming soon".
+
+### 26A.9 Suggested CSS (Excerpt)
+```css
+.planner-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  height:56px;
+  padding:0 16px;
+  background:var(--color-surface-panel);
+  border-bottom:1px solid var(--color-border-subtle);
+}
+.planner-header__left, .planner-header__right { display:flex; align-items:center; gap:10px; }
+.mode-toggle { display:inline-flex; background:rgba(255,255,255,0.05); border-radius:6px; overflow:hidden; }
+.mode-toggle button { border:none; background:transparent; padding:6px 12px; font-size:13px; color:var(--color-text-primary); cursor:pointer; }
+.mode-toggle button.is-active { background:var(--color-accent); color:#fff; }
+.nav-btn { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.15); background:transparent; border-radius:4px; cursor:pointer; }
+.nav-btn:hover { background:rgba(255,255,255,0.08); }
+.nav-btn:disabled { opacity:.4; cursor:default; }
+.report-btn, .cloud-btn { border:1px solid rgba(255,255,255,0.18); background:transparent; color:var(--color-text-primary); border-radius:4px; padding:6px 12px; font-size:13px; cursor:pointer; }
+.report-btn:hover, .cloud-btn:hover { background:rgba(255,255,255,0.07); }
+#storage-status { font-size:13px; color:var(--color-text-muted); min-width:120px; }
+#storage-status.is-success { color:var(--color-success); }
+#storage-status.is-error { color:var(--color-error); }
+```
+
+### 26A.10 Future Enhancements
+- Breadcrumb-like timeline (Quarter / Month / Week quick jump).
+- Inline mini-chart sparkline summarizing allocated hours this week.
+- Persistent cloud sync indicator (animated icon when writes pending).
+
+---
+**End Top Bar Specification (26A v1)**
